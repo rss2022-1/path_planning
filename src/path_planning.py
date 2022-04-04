@@ -22,9 +22,16 @@ class PathPlan(object):
         
         self.goal = PoseStamped()
         self.start = Pose()
+        self.map = None
+        self.occupancy_threshold = 50
 
     def map_cb(self, msg):
-        pass ## REMOVE AND FILL IN ##
+        # convert map data into a 2D numpy array indexed by (u,v) where 
+        # self.map[v][u] = 1 means the cell at (u, v) is occupied, while
+        # = 0 means it is not occupied
+        self.map = np.reshape(msg.data, (msg.info.height, msg.info.width))
+        self.map = np.where(self.map < 0, 1, self.map)
+        self.map = np.where(self.map > self.occupancy_threshold, 1, 0)
 
 
     def odom_cb(self, msg):
@@ -33,6 +40,7 @@ class PathPlan(object):
 
     def goal_cb(self, msg):
         self.goal = msg
+
 
     def plan_path(self, start_point, end_point, map):
         ## CODE FOR PATH PLANNING ##
