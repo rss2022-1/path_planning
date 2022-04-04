@@ -42,6 +42,16 @@ class PathPlan(object):
         self.goal = msg
 
 
+    def convert_xy_to_uv(self, pose):
+        # TODO: apply translation and rotation inverse from:
+        # | R T |
+        # | 0 1 |
+        # divide by resolution
+
+        # use to convert start and end positions into (u, v) frame for plan_path()
+        pass 
+
+
     def plan_path(self, start_point, end_point, map):
         ## CODE FOR PATH PLANNING ##
 
