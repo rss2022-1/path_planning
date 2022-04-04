@@ -2,7 +2,7 @@
 
 import rospy
 import numpy as np
-from geometry_msgs.msg import PoseStamped, PoseArray
+from geometry_msgs.msg import PoseStamped, PoseArray, Pose
 from nav_msgs.msg import Odometry, OccupancyGrid
 import rospkg
 import time, os
@@ -21,13 +21,14 @@ class PathPlan(object):
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
         
         self.goal = PoseStamped()
+        self.start = Pose()
 
     def map_cb(self, msg):
         pass ## REMOVE AND FILL IN ##
 
 
     def odom_cb(self, msg):
-        pass ## REMOVE AND FILL IN ##
+        self.start = msg.pose.pose
 
 
     def goal_cb(self, msg):
