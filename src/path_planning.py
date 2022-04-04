@@ -19,7 +19,8 @@ class PathPlan(object):
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
-
+        
+        self.goal = PoseStamped()
 
     def map_cb(self, msg):
         pass ## REMOVE AND FILL IN ##
@@ -30,7 +31,7 @@ class PathPlan(object):
 
 
     def goal_cb(self, msg):
-        pass ## REMOVE AND FILL IN ##
+        self.goal = msg
 
     def plan_path(self, start_point, end_point, map):
         ## CODE FOR PATH PLANNING ##
