@@ -32,6 +32,48 @@ class PurePursuit(object):
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
+    def drive(self, current_pose, goal_pose):
+        ''' Computes the steering angle and speed for the robot to follow the given
+            trajectory.
+        '''
+        # FILL IN #
+        # Find closest point on trajectory
+        closest_point = self.find_closest_point_on_trajectory(current_pose)
+        # Find lookahead point
+        lookahead_point = self.find_lookahead_point(closest_point)
+        # Compute the steering angle and speed
+        steering_angle = self.compute_steering_angle()
+        # Publish the drive command
+        # Return the drive command
+
+    def find_closest_point_on_trajectory(self, current_pose):
+        ''' Computes the closest point on the trajectory to the given pose.
+        '''
+        # FILL IN #
+        # Compute the closest point on the trajectory to the given pose
+        # https://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment/1501725#1501725
+        # Return the closest point and segment on the trajectory
+
+    def find_lookahead_point(self, start_point):
+        ''' Computes the lookahead point for the given trajectory. The lookahead point
+            is the point on the trajectory that is closest to the intersection of the 
+            circle defined by the robot's current position and the lookahead radius.
+        '''
+        # FILL IN #
+        # Note: Only look at points further ahead on the trajectory than the 
+        # point returned by find_closest_point_on_trajectory
+        # Compute the lookahead point
+        # Return the lookahead point
+
+    def compute_steering_angle(self):
+        ''' Computes the steering angle for the robot to follow the given trajectory.
+        '''
+        # FILL IN #
+        # Compute eta - use a dot b = |a|*|b|*cos(eta) where a is our forward velocity and 
+        # b is the vector from the robot to the lookahead point
+        # Compute the steering angle
+
+    
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
