@@ -12,6 +12,7 @@ class PathPlan(object):
     """ Listens for goal pose published by RViz and uses it to plan a path from
     current car pose.
     """
+
     def __init__(self):
         self.odom_topic = rospy.get_param("~odom_topic")
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
@@ -25,6 +26,8 @@ class PathPlan(object):
         self.map = None
         self.occupancy_threshold = 50
 
+        self.search = True # True for search-based planning, False for sample-based planning
+
     def map_cb(self, msg):
         # convert map data into a 2D numpy array indexed by (u,v) where 
         # self.map[v][u] = 1 means the cell at (u, v) is occupied, while
@@ -33,6 +36,7 @@ class PathPlan(object):
         self.map = np.where(self.map < 0, 1, self.map)
         self.map = np.where(self.map > self.occupancy_threshold, 1, 0)
 
+        # how many times is this called?
 
     def odom_cb(self, msg):
         self.start = msg.pose.pose
@@ -51,9 +55,20 @@ class PathPlan(object):
         # use to convert start and end positions into (u, v) frame for plan_path()
         pass 
 
+    def astar_search(self, start_point, end_point, map):
+        pass
+
+    def random_sampling_search(self, start_point, end_point, map):
+        # invoked if 1) A* too slow or 2) we gun for extra credit or 3) both
+        pass
 
     def plan_path(self, start_point, end_point, map):
         ## CODE FOR PATH PLANNING ##
+
+        if self.search: # I think this updates self.trajectory?
+            self.astar_search(start_point, end_point, map)
+        else:
+            self.random_sampling_search(start_point, end_point, map)
 
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
