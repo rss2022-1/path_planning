@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from sklearn.metrics import jaccard_score
 import rospy
 import numpy as np
 from geometry_msgs.msg import PoseStamped, PoseArray, Pose, Point
@@ -22,9 +23,12 @@ class PathPlan(object):
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
         
-        self.goal = PoseStamped()
-        self.start = Pose()
+        self.goal = Point()
+        self.start = Point()
         self.map = None
+        self.map_resolution = 1.0
+        self.map_origin_pos = np.zeros((3, 1)) # [x, y, z]
+        self.map_origin_rot = np.zeros((4, 1)) # [x, y, z, w]
         self.occupancy_threshold = 50
 
         self.search = True # True for search-based planning, False for sample-based planning
@@ -36,6 +40,14 @@ class PathPlan(object):
         self.map = np.reshape(msg.data, (msg.info.height, msg.info.width))
         self.map = np.where(self.map < 0, 1, self.map)
         self.map = np.where(self.map > self.occupancy_threshold, 1, 0)
+        self.map_resolution = msg.info.resolution
+        self.map_origin_pos[0] = msg.info.origin.position.x
+        self.map_origin_pos[1] = msg.info.origin.position.y
+        self.map_origin_pos[2] = msg.info.origin.position.z
+        self.map_origin_rot[0] = msg.info.origin.orientation.x
+        self.map_origin_rot[1] = msg.info.origin.orientation.y
+        self.map_origin_rot[2] = msg.info.origin.orientation.z
+        self.map_origin_rot[3] = msg.info.origin.orientation.w
 
 
     def odom_cb(self, msg):
@@ -60,7 +72,12 @@ class PathPlan(object):
             float64 y
             float64 z
         """
+<<<<<<< HEAD
         self.start = [msg.pose.pose.position.x, msg.pose.pose.position.y] # [x, y]
+=======
+        start_xy = msg.pose.pose.position
+        self.start = self.convert_xy_to_uv(start_xy)
+>>>>>>> 7a1bff2714f337a253ef3c9a1449591c9ed22669
 
 
     def goal_cb(self, msg):
@@ -78,22 +95,91 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-        self.goal = [msg.pose.position.x, msg.pose.position.y] # [x, y]
+        goal_xy = msg.pose.pose.position
+        self.goal = self.convert_xy_to_uv(goal_xy)
 
 
-    def convert_xy_to_uv(self, pose):
-        # TODO: apply translation and rotation inverse from:
-        # | R T |
-        # | 0 1 |
-        # divide by resolution
+    def get_rot_matrix_from_quaternion(self, q):
+        """
+        q = a 4x1 column vector representing a quaternion [x, y, z, w]
+        """
+        q0 = q[0]
+        q1 = q[1]
+        q2 = q[2]
+        q3 = q[3]
+        
+        r00 = 2 * (q0 * q0 + q1 * q1) - 1
+        r01 = 2 * (q1 * q2 - q0 * q3)
+        r02 = 2 * (q1 * q3 + q0 * q2)
+        
+        r10 = 2 * (q1 * q2 + q0 * q3)
+        r11 = 2 * (q0 * q0 + q2 * q2) - 1
+        r12 = 2 * (q2 * q3 - q0 * q1)
+        
+        r20 = 2 * (q1 * q3 - q0 * q2)
+        r21 = 2 * (q2 * q3 + q0 * q1)
+        r22 = 2 * (q0 * q0 + q3 * q3) - 1
+        
+        rot_matrix = np.array([[r00, r01, r02],
+                               [r10, r11, r12],
+                               [r20, r21, r22]])
 
-        # use to convert start and end positions into (u, v) frame for plan_path()
-        pass 
+        return rot_matrix
 
-    def convert_uv_to_xy(self, pose):
-        # TODO: same as xy_to_uv, but in reverse
-        # can this handle single points and lists?
-        pass
+    
+    def get_transformation_matrix(self, rot_matrix, transl_matrix):
+        """
+        Given rotation matrix R, and translation matrix t, returns transformation matrix T:
+        T = | R t |
+            | 0 1 |
+        """
+        homogenous_row = np.array([[0, 0, 0, 1]])
+        rot_and_transl = np.hstack(rot_matrix, transl_matrix)
+        transform_matrix = np.vstack(rot_and_transl, homogenous_row)
+        return transform_matrix
+
+
+    def convert_xy_to_uv(self, point):
+        """
+        point is a Point in the xy-coordinate system
+        returns a Point in uv-coordinate system
+        """
+        new_pose = np.zeros(4, 1)
+        new_pose[0] = point.x
+        new_pose[1] = point.y
+        new_pose[3] = 1
+        translation_matrix = self.map_origin_pos
+        rotation_matrix = self.get_rot_matrix_from_quaternion(self.map_origin_rot)
+        transform_matrix = self.get_transformation_matrix(rotation_matrix, translation_matrix)
+        transform_inv = np.linalg.inv(transform_matrix)
+        uv_pose = transform_inv @ new_pose
+        uv_pose = uv_pose / self.map_resolution
+        uv_point = Point()
+        uv_point.x = uv_pose[0]
+        uv_point.y = uv_pose[1]
+        uv_point.z = 0
+        return uv_point
+
+    def convert_uv_to_xy(self, point):
+        """
+        point is a Point in the uv-coordinate system
+        returns a Point in xy-coordinate system
+        """
+        new_pose = np.zeros(4, 1)
+        new_pose[0] = point.x
+        new_pose[1] = point.y
+        new_pose[3] = 1
+        new_pose = self.map_resolution * new_pose
+        translation_matrix = self.map_origin_pos
+        rotation_matrix = self.get_rot_matrix_from_quaternion(self.map_origin_rot)
+        transform_matrix = self.get_transformation_matrix(rotation_matrix, translation_matrix)
+        xy_pose = transform_matrix @ new_pose
+        xy_point = Point()
+        xy_point.x = xy_pose[0]
+        xy_point.y = xy_pose[1]
+        xy_point.z = 0
+        return xy_point
+
 
     def get_euclidean_distance(self, start_point, end_point):
         """
@@ -168,8 +254,8 @@ class PathPlan(object):
         """
         ## CODE FOR PATH PLANNING ##
 
-        if start_point == end_point:
-            # if for some reason the start and end point are the same,
+        if abs(start_point.x - end_point.x) < 0.001 and abs(start_point.y - end_point.y) < 0.001:
+            # if for some reason the start and end point are the same (1 mm tolerance),
             # then do nothing
             return
 
@@ -187,10 +273,7 @@ class PathPlan(object):
         # profit 
 
         for point in path:
-            new_point = Point()
-            new_point_xy = self.convert_uv_to_xy(point)
-            new_point.x = new_point_xy[0]
-            new_point.y = new_point_xy[1]
+            new_point = self.convert_uv_to_xy(point)
             self.trajectory.addPoint(new_point)
 
         ## ##
