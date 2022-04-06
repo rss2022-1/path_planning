@@ -27,6 +27,7 @@ class PurePursuit(object):
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
+        self.intersection_pub = rospy.Publisher('/intersection_point', PointCloud, queue_size=1)
         self.current_pose = None
         self.prev_pose = None
         self.more_prev_pose = None
@@ -48,9 +49,10 @@ class PurePursuit(object):
         self.more_prev_pose = self.prev_pose
         self.prev_pose = self.current_pose
         # Get current pose
-        self.current_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.w)
+        self.current_pose = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.w])
         # Find closest point on trajectory
-        closest_point = self.find_closest_point_on_trajectory(self.current_pose)
+        # closest_point = self.find_closest_point_on_trajectory(self.current_pose)
+        closest_point = 0
         # Find lookahead point
         lookahead_point = self.find_lookahead_point(self.current_pose, closest_point)
         # Compute the steering angle and speed
@@ -90,9 +92,9 @@ class PurePursuit(object):
         current_point = np.array([current_pose[0], current_pose[1]])
         p1_array = np.array(self.trajectory.points[0:-1])
         p2_array = np.array(self.trajectory.points[1:])
-        t_array = np.dot(current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array)**2
+        t_array = np.einsum("ij,ij->i", current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array)**2
         t_array = np.clip(t_array, 0, 1)
-        closest_points = p1_array + t_array * (p2_array - p1_array)
+        closest_points = p1_array + np.einsum('i,ij->ij', t_array, p2_array-p1_array)
         closest_index = np.argmin(np.linalg.norm(closest_points - current_point, axis=1))
         return closest_index
 
@@ -105,14 +107,13 @@ class PurePursuit(object):
         # FILL IN # JORDAN
         # Note: Only look at points further ahead on the trajectory than the
         # point returned by find_closest_point_on_trajectory
-        points = self.trajectory.points[start_point_idx:]
-        distances = self.trajectory.distances[start_point_idx:]
+        points = np.array(self.trajectory.points[start_point_idx:])
         center = current_pose[:-1]
         rospy.loginfo("get lookahead")
 
         # Compute the lookahead point
         # NOT IN A FUNCTION TO REDUCE OVERHEAD
-        for i in range(len(distances)):
+        for i in range(len(points)-1):
             p1 = points[i]
             p2 = points[i+1]
             V = p2 - p1
@@ -135,13 +136,13 @@ class PurePursuit(object):
                     t = t2
                 else:
                     continue
-                res = p1 + t1 * V
-                # self.publish_point(res)
+                res = p1 + t * V
+                self.publish_point(res)
                 return res
         # Intersection not found, how to find point to go to?
         rospy.loginfo("COULD NOT FIND INTERSECTION DO SOMETHING")
 
-        return min(start_point_idx + 2, len(distances))
+        return min(start_point_idx + 2, len(points)-1)
 
     def test_compute_intersection(self):
         print("TESTING intersection point...")
