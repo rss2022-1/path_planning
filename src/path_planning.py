@@ -50,8 +50,17 @@ class PathPlan(object):
             Pose pose
             # (x, y, z, rotation about X axis, rotation about Y axis, rotation about Z axis)
             float64[36] covariance
+
+        Pose.msg
+            Point position
+            Quaternion orientation
+
+        Point.msg
+            float64 x
+            float64 y
+            float64 z
         """
-        self.start = msg.pose.pose[:3] # [x, y, z]
+        self.start = [msg.pose.pose.Point.x, msg.pose.pose.Point.y] # [x, y]
 
 
     def goal_cb(self, msg):
@@ -69,7 +78,7 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-        self.goal = [msg.pose.Point.x, msg.pose.Point.y, msg.pose.Point.z] # [x, y, z]
+        self.goal = [msg.pose.position.x, msg.pose.position.y] # [x, y]
 
 
     def convert_xy_to_uv(self, pose):
@@ -115,7 +124,8 @@ class PathPlan(object):
             a = point[0] + i
             for j in plus:
                 b = point[1] + j
-                if self.map[a][b] == 0: # no obstacle
+                if self.map[a][b] == 0: # no obstacles
+                    # assumes (u, v) coordinates
                     neighbors.add([a, b])
 
         return neighbors
