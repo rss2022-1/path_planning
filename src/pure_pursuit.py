@@ -16,17 +16,17 @@ class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
     """
     def __init__(self):
-        self.odom_topic       = rospy.get_param("~odom_topic")
-        self.lookahead        = rospy.get_param("~lookahead", .5)# FILL IN #
-        self.speed            = 0# FILL IN #
-        self.wrap             = 0# FILL IN #
-        self.wheelbase_length = 0# FILL IN #
+        # self.odom_topic       = rospy.get_param("~odom_topic")
+        # self.lookahead        = rospy.get_param("~lookahead", .5)
+        self.lookahead = 2
+        self.speed            = 0
+        self.wrap             = 0
+        self.wheelbase_length = 0
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
-        self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
-        self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
-        self.intersection_pub = rospy.Publisher("/intersection_point", PointCloud, queue_size=1)
+        # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
+        # self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+        # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
+        # self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -45,15 +45,22 @@ class PurePursuit(object):
         # Get current pose
         rospy.loginfo("DRIVING")
         current_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.w)
-        # Find closest point on trajectory
-        # closest_point = self.find_closest_point_on_trajectory(current_pose)
-        closest_point = 0
+        # Find closest point index on trajectory
+        closest_point_index = self.find_closest_point_on_trajectory(current_pose)
         # Find lookahead point
-        lookahead_point = self.find_lookahead_point(current_pose, closest_point)
+        lookahead_point = self.find_lookahead_point(current_pose, closest_point_index)
         # Compute the steering angle and speed
         steering_angle = self.compute_steering_angle()
         # Publish the drive command
         # Return the drive command
+
+    def test_find_closest_point_on_trajectory(self):
+        print("Testing find_closest_point_on_trajectory")
+        current_pose = [0, 0, 0]
+        self.trajectory.points = [[0, 1], [1, 1], [2, 20]]
+        closest_index = self.find_closest_point_on_trajectory(current_pose)
+        assert closest_index == 0, "Closest index should be 0, got %d" % closest_index
+        print("test_find_closest_point_on_trajectory..........OK!")
 
     def find_closest_point_on_trajectory(self, current_pose):
         ''' Computes the closest point on the trajectory to the given pose. RETURN THE INDEX
@@ -62,15 +69,27 @@ class PurePursuit(object):
         # Compute the closest point on the trajectory to the given pose
         # https://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment/1501725#1501725
         # Return the closest point and segment on the trajectory
+
+        # SLOW VERSION
+        # current_point = np.array([current_pose[0], current_pose[1]])
+        # closest_points = []
+        # for i in range(len(self.trajectory.points)-1):
+        #     p1 = np.array(self.trajectory.points[i])
+        #     p2 = np.array(self.trajectory.points[i+1])
+        #     t = max(0, min(1, np.dot(current_point - p1, p2 - p1) / np.linalg.norm(p2 - p1)**2))
+        #     closest_point = p1 + t * (p2 - p1)
+        #     closest_points.append(closest_point)
+        # closest_index = np.argmin(np.linalg.norm(np.array(closest_points) - current_point, axis=1))
+        # return closest_index
+
+        # FAST VERSION
         current_point = np.array([current_pose[0], current_pose[1]])
-        closest_points = []
-        for i in range(len(self.trajectory.points)-1):
-            p1 = self.trajectory.points[i]
-            p2 = self.trajectory.points[i+1]
-            t = max(0, min(1, np.dot(current_point - p1, p2 - p1) / np.linalg.norm(p2 - p1)**2))
-            closest_point = p1 + t * (p2 - p1)
-            closest_points.append(closest_point)
-        closest_index = np.argmin(np.linalg.norm(np.array(closest_points) - current_point, axis=1))
+        p1_array = np.array(self.trajectory.points[0:-1])
+        p2_array = np.array(self.trajectory.points[1:])
+        t_array = np.dot(current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array)**2
+        t_array = np.clip(t_array, 0, 1)
+        closest_points = p1_array + t_array * (p2_array - p1_array)
+        closest_index = np.argmin(np.linalg.norm(closest_points - current_point, axis=1))
         return closest_index
 
 
@@ -103,26 +122,53 @@ class PurePursuit(object):
                 sqrt_disc = np.sqrt(disc)
                 t1 = (-b + sqrt_disc) / (2 * a)
                 t2 = (-b - sqrt_disc) / (2 * a)
-                if not (0 <= t1 <= 1 or 0 <= t2 <= 1):
+                if 0 <= t1 <= 1 and 0 <= t2 <= 1:
+                    # choose which one
+                    t = min(t1, t2)
+                elif 0 <= t1 <= 1:
+                    t = t1
+                elif 0 <= t2 <= 1:
+                    t = t2
+                else:
                     continue
-                # When both intersect which to choose?
-                t = max(0, min(1, - b / (2 * a)))
-                res = p1 + t * V
-                cloud = PointCloud()
-                cloud.header.frame_id = "/map"
-                cloud.points = [Point32()]
-                cloud[0].x = res[0]
-                cloud[0].y = res[1]
-                rospy.loginfo("found point")
-                self.intersection_pub.publish(cloud)
+                res = p1 + t1 * V
+                # self.publish_point(res)
                 return res
         # Intersection not found, how to find point to go to?
         rospy.loginfo("COULD NOT FIND INTERSECTION DO SOMETHING")
-        return None
+
+        return min(start_point_idx + 2, len(distances))
+
+    def test_compute_intersection(self):
+        print("TESTING intersection point...")
+        current_pose = np.array([0, 0, 0])
+        self.trajectory.points = np.array([[0, 0], [1, 0], [2, 0], [3,0]])
+        self.trajectory.distances = np.array([1,1,1])
+        self.lookahead = 2
+        int_point  = self.find_lookahead_point(current_pose, 0)
+        print("point: ", int_point)
+        assert int_point[0] == 2, "Closest point x should be 2, got %d" % int_point[0]
+        print("test_find_lookahead_point..........OK!")
+        print("TESTING intersection point 2....")
+        current_pose = np.array([0, 0, 0])
+        self.trajectory.points = np.array([[0, 0], [2, 0], [4, 0], [6,0]])
+        self.trajectory.distances = np.array([2,2,2])
+        self.lookahead = 3
+        int_point  = self.find_lookahead_point(current_pose, 0)
+        print("point: ", int_point)
+        assert int_point[0] == 3, "Closest point x should be 3, got %d" % int_point[0]
+        print("test_find_lookahead_point 2..........OK!")
+
+    def publish_point(self, res):
+        cloud = PointCloud()
+        cloud.header.frame_id = "/map"
+        cloud.points = [Point32()]
+        cloud.points[0].x = res[0]
+        cloud.points[0].y = res[1]
+        rospy.loginfo("found point")
+        self.intersection_pub.publish(cloud)
 
 
-
-        # Return the lookahead point
 
     def compute_steering_angle(self):
         ''' Computes the steering angle for the robot to follow the given trajectory.
@@ -137,4 +183,6 @@ class PurePursuit(object):
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
     pf = PurePursuit()
+    pf.test_find_closest_point_on_trajectory()
+    pf.test_compute_intersection()
     rospy.spin()
