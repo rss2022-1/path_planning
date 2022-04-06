@@ -58,6 +58,17 @@ class PurePursuit(object):
         # Compute the closest point on the trajectory to the given pose
         # https://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment/1501725#1501725
         # Return the closest point and segment on the trajectory
+        current_point = np.array([current_pose[0], current_pose[1]])
+        closest_points = []
+        for i in range(len(self.trajectory.points)-1):
+            p1 = self.trajectory.points[i]
+            p2 = self.trajectory.points[i+1]
+            t = max(0, min(1, np.dot(current_point - p1, p2 - p1) / np.linalg.norm(p2 - p1)**2))
+            closest_point = p1 + t * (p2 - p1)
+            closest_points.append(closest_point)
+        closest_index = np.argmin(np.linalg.norm(np.array(closest_points) - current_point, axis=1))
+        return closest_index
+        
 
     def find_lookahead_point(self, current_pose, start_point_idx):
         ''' Computes the lookahead point for the given trajectory. The lookahead point
