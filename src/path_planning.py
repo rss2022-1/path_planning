@@ -60,7 +60,7 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-        self.start = [msg.pose.pose.Point.x, msg.pose.pose.Point.y] # [x, y]
+        self.start = [msg.pose.pose.position.x, msg.pose.pose.position.y] # [x, y]
 
 
     def goal_cb(self, msg):
@@ -109,7 +109,7 @@ class PathPlan(object):
             distance (float)
         """
 
-        if len(start_point) != len(end_point)
+        if len(start_point) != len(end_point):
             rospy.loginfo("Unable to compute Euclidean distance.")
             return
 
@@ -162,6 +162,10 @@ class PathPlan(object):
         pass
 
     def plan_path(self, start_point, end_point, map):
+        """
+        currently assume start_point, end_point are arrays
+        should they be points instead?
+        """
         ## CODE FOR PATH PLANNING ##
 
         if start_point == end_point:
