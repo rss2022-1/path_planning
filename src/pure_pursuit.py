@@ -69,9 +69,33 @@ class PurePursuit(object):
         # point returned by find_closest_point_on_trajectory
         points = self.trajectory.points[start_point_idx:]
         distances = self.trajectory.distances[start_point_idx:]
-
+        center = current_pose[:-1]
 
         # Compute the lookahead point
+        # NOT IN A FUNCTION TO REDUCE OVERHEAD
+        for i in range(len(distances)):
+            p1 = points[i]
+            p2 = points[i+1]
+            V = p2 - p1
+            a = V.dot(V)
+            b = 2 * V.dot(p1-center)
+            c = p1.dot(p1) + center.dot(center) - 2 * p1.dot(center) - self.lookahead**2
+            disc = b**2 - 4 * a * c
+            if disc < 0:
+                continue
+            else:
+                sqrt_disc = np.sqrt(disc)
+                t1 = (-b + sqrt_disc) / (2 * a)
+                t2 = (-b - sqrt_disc) / (2 * a)
+                if not (0 <= t1 <= 1 or 0 <= t2 <= 1):
+                    continue
+                t = max(0, min(1, - b / (2 * a)))
+                return p1 + t * V
+        # HANDLE EDGE CASES
+        rospy.loginfo("COULD NOT FIND INTERSECTION DO SOMETHING")
+        return None
+
+
 
         # Return the lookahead point
 
