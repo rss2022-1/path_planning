@@ -104,8 +104,20 @@ class PathPlan(object):
         """
         Finds all viable neighbors to a given point.
         If there is an obstacle at that location, do not include.
+        Assumes 2D coordinates.
+        Includes diagonals. 
         """
-        pass
+        plus = [-1, 0, 1]
+
+        neighbors = {point} 
+
+        for i in plus:  
+            a = point[0] + i
+            for j in plus:
+                b = point[1] + j
+                neighbors.add([a, b])
+
+        return neighbors
 
     def astar_search(self, start_point, end_point, map):
         queue = []
@@ -140,10 +152,15 @@ class PathPlan(object):
             # then do nothing
             return
 
-        if self.search: # I think this updates self.trajectory?
-            self.astar_search(start_point, end_point, map)
+        if self.search: 
+            path = self.astar_search(start_point, end_point, map)
         else:
-            self.random_sampling_search(start_point, end_point, map)
+            path = self.random_sampling_search(start_point, end_point, map)
+
+        # path will be a list of points in (u, v) coordinates
+        # transform to (x, y) coordinates
+        # update self.trajectory
+        # profit 
 
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
