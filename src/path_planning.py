@@ -34,6 +34,11 @@ class PathPlan(object):
         self.search = True # True for search-based planning, False for sample-based planning
 
     def map_cb(self, msg):
+        """
+        Converts map data into a 2D numpy array indexed by (u, v) where 
+        self.map[v][u] = 1 means the cell at (u, v) is occupied, while
+        self.map[v][u] = 0 means it is not occupied
+        """
         # convert map data into a 2D numpy array indexed by (u,v) where 
         # self.map[v][u] = 1 means the cell at (u, v) is occupied, while
         # = 0 means it is not occupied
@@ -72,12 +77,8 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-<<<<<<< HEAD
-        self.start = [msg.pose.pose.position.x, msg.pose.pose.position.y] # [x, y]
-=======
         start_xy = msg.pose.pose.position
         self.start = self.convert_xy_to_uv(start_xy)
->>>>>>> 7a1bff2714f337a253ef3c9a1449591c9ed22669
 
 
     def goal_cb(self, msg):
@@ -186,20 +187,19 @@ class PathPlan(object):
         Calculates the Euclidean distance between two points.
         Intended for use as a heuristic.
         Should work independent of coordinate frames.
+        Assumes 2D points.
         
         Inputs:
-            start_point: position array
-            end_point: position array
+            start_point: Point
+            end_point: Point
 
         Outputs:
             distance (float)
         """
 
-        if len(start_point) != len(end_point):
-            rospy.loginfo("Unable to compute Euclidean distance.")
-            return
+        point_diff = np.array([end_point.x-start_point.x, end_point.y-end_point.y])
 
-        return np.sqrt(np.sum(np.square(end_point-start_point)))
+        return np.sqrt(np.sum(np.square(point_diff)))
 
     def get_neighbors(self, point):
         """
@@ -207,22 +207,54 @@ class PathPlan(object):
         If there is an obstacle at that location, do not include.
         Assumes 2D coordinates.
         Includes diagonals. 
+
+        Inputs: 
+            point: Point in u, v coordinates
+
+        Outputs:
+            set of Points
         """
         plus = [-1, 0, 1]
 
         neighbors = {point} 
 
         for i in plus:  
-            a = point[0] + i
+            a = point.x + i
             for j in plus:
-                b = point[1] + j
+                b = point.y + j
                 if self.map[b][a] == 0: # no obstacles
-                    # assumes (u, v) coordinates
-                    neighbors.add([a, b])
+                    neighbors.add(self.make_new_point(a, b))
 
         return neighbors
+    
+    
+    def make_new_point(self, x, y, z=0):
+        """
+        Given x, y, z (z opt.) coordinates, returns a point object.
+        """
+        new_point = Point()
+        new_point.x = x
+        new_point.y = y
+        new_point.z = z
+
+        return new_point
+
 
     def astar_search(self, start_point, end_point, map):
+        """
+        A* Search
+        Sorts queue based on heuristic that is a sum of:
+            distance from last point to end point, and
+            total distance traveled so far
+
+        Inputs:
+            start_point: Point
+            end_point: Point
+            map: nd numpy array (from OccupancyGrid)
+
+        Output:
+            list of Points
+        """
         queue = []
         # length 3 tuple of (distance to end, length of path, list of points in path)
         queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
@@ -249,8 +281,19 @@ class PathPlan(object):
 
     def plan_path(self, start_point, end_point, map):
         """
-        currently assume start_point, end_point are arrays
-        should they be points instead?
+        Plans a path from the start point to the end point.
+
+        Inputs:
+            start_point: Point
+            end_point: Point
+            map: nd numpy array (from OccupancyGrid)
+
+        Output:
+            returns nothing
+            updates self.trajectory
+            publishes self.trajectory
+            visualizes self.trajectory
+
         """
         ## CODE FOR PATH PLANNING ##
 
