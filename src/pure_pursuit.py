@@ -42,10 +42,10 @@ class PurePursuit(object):
         # FILL IN #
         # Get current pose
         current_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.w)
-        # Find closest point on trajectory
-        closest_point = self.find_closest_point_on_trajectory(current_pose)
+        # Find closest point index on trajectory
+        closest_point_index = self.find_closest_point_on_trajectory(current_pose)
         # Find lookahead point
-        lookahead_point = self.find_lookahead_point(current_pose, closest_point)
+        lookahead_point = self.find_lookahead_point(current_pose, closest_point_index)
         # Compute the steering angle and speed
         steering_angle = self.compute_steering_angle()
         # Publish the drive command
