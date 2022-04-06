@@ -23,17 +23,22 @@ class PathPlan(object):
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
         
-        self.goal = PoseStamped()
-        self.start = Pose()
+        self.goal = Point()
+        self.start = Point()
         self.map = None
         self.map_resolution = 1.0
-        self.map_origin_pos = np.zeros((3,1)) # [x, y, z]
-        self.map_origin_rot = np.zeros((4,1)) # [x, y, z, w]
+        self.map_origin_pos = np.zeros((3, 1)) # [x, y, z]
+        self.map_origin_rot = np.zeros((4, 1)) # [x, y, z, w]
         self.occupancy_threshold = 50
 
         self.search = True # True for search-based planning, False for sample-based planning
 
     def map_cb(self, msg):
+        """
+        Converts map data into a 2D numpy array indexed by (u, v) where 
+        self.map[v][u] = 1 means the cell at (u, v) is occupied, while
+        self.map[v][u] = 0 means it is not occupied
+        """
         # convert map data into a 2D numpy array indexed by (u,v) where 
         # self.map[v][u] = 1 means the cell at (u, v) is occupied, while
         # = 0 means it is not occupied
@@ -72,7 +77,8 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-        self.start = [msg.pose.pose.Point.x, msg.pose.pose.Point.y] # [x, y]
+        start_xy = msg.pose.pose.position
+        self.start = self.convert_xy_to_uv(start_xy)
 
 
     def goal_cb(self, msg):
@@ -90,7 +96,8 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-        self.goal = [msg.pose.position.x, msg.pose.position.y] # [x, y]
+        goal_xy = msg.pose.pose.position
+        self.goal = self.convert_xy_to_uv(goal_xy)
 
 
     def get_rot_matrix_from_quaternion(self, q):
@@ -117,7 +124,7 @@ class PathPlan(object):
         rot_matrix = np.array([[r00, r01, r02],
                                [r10, r11, r12],
                                [r20, r21, r22]])
-                                
+
         return rot_matrix
 
     
@@ -133,29 +140,41 @@ class PathPlan(object):
         return transform_matrix
 
 
-    def convert_xy_to_uv(self, pose):
-        # TODO: apply translation and rotation inverse from:
-        # | R T |
-        # | 0 1 |
-        # divide by resolution
-
-        # use to convert start and end positions into (u, v) frame for plan_path()
-        pass 
-
-    def convert_uv_to_xy(self, pose):
+    def convert_xy_to_uv(self, point):
         """
-        pose is a list of form [u, v] where u = the u coordinate and v = the v coordinate
-        returns a Point in x, y coordinate system
+        point is a Point in the xy-coordinate system
+        returns a Point in uv-coordinate system
         """
         new_pose = np.zeros(4, 1)
-        new_pose[0] = pose[0]
-        new_pose[1] = pose[1]
+        new_pose[0] = point.x
+        new_pose[1] = point.y
+        new_pose[3] = 1
+        translation_matrix = self.map_origin_pos
+        rotation_matrix = self.get_rot_matrix_from_quaternion(self.map_origin_rot)
+        transform_matrix = self.get_transformation_matrix(rotation_matrix, translation_matrix)
+        transform_inv = np.linalg.inv(transform_matrix)
+        uv_pose = transform_inv @ new_pose
+        uv_pose = uv_pose / self.map_resolution
+        uv_point = Point()
+        uv_point.x = uv_pose[0]
+        uv_point.y = uv_pose[1]
+        uv_point.z = 0
+        return uv_point
+
+    def convert_uv_to_xy(self, point):
+        """
+        point is a Point in the uv-coordinate system
+        returns a Point in xy-coordinate system
+        """
+        new_pose = np.zeros(4, 1)
+        new_pose[0] = point.x
+        new_pose[1] = point.y
         new_pose[3] = 1
         new_pose = self.map_resolution * new_pose
         translation_matrix = self.map_origin_pos
         rotation_matrix = self.get_rot_matrix_from_quaternion(self.map_origin_rot)
         transform_matrix = self.get_transformation_matrix(rotation_matrix, translation_matrix)
-        xy_pose = np.dot(transform_matrix, new_pose)
+        xy_pose = transform_matrix @ new_pose
         xy_point = Point()
         xy_point.x = xy_pose[0]
         xy_point.y = xy_pose[1]
@@ -168,20 +187,19 @@ class PathPlan(object):
         Calculates the Euclidean distance between two points.
         Intended for use as a heuristic.
         Should work independent of coordinate frames.
+        Assumes 2D points.
         
         Inputs:
-            start_point: position array
-            end_point: position array
+            start_point: Point
+            end_point: Point
 
         Outputs:
             distance (float)
         """
 
-        if len(start_point) != len(end_point):
-            rospy.loginfo("Unable to compute Euclidean distance.")
-            return
+        point_diff = np.array([end_point.x-start_point.x, end_point.y-end_point.y])
 
-        return np.sqrt(np.sum(np.square(end_point-start_point)))
+        return np.sqrt(np.sum(np.square(point_diff)))
 
     def get_neighbors(self, point):
         """
@@ -189,22 +207,54 @@ class PathPlan(object):
         If there is an obstacle at that location, do not include.
         Assumes 2D coordinates.
         Includes diagonals. 
+
+        Inputs: 
+            point: Point in u, v coordinates
+
+        Outputs:
+            set of Points
         """
         plus = [-1, 0, 1]
 
         neighbors = {point} 
 
         for i in plus:  
-            a = point[0] + i
+            a = point.x + i
             for j in plus:
-                b = point[1] + j
+                b = point.y + j
                 if self.map[b][a] == 0: # no obstacles
-                    # assumes (u, v) coordinates
-                    neighbors.add([a, b])
+                    neighbors.add(self.make_new_point(a, b))
 
         return neighbors
+    
+    
+    def make_new_point(self, x, y, z=0):
+        """
+        Given x, y, z (z opt.) coordinates, returns a point object.
+        """
+        new_point = Point()
+        new_point.x = x
+        new_point.y = y
+        new_point.z = z
+
+        return new_point
+
 
     def astar_search(self, start_point, end_point, map):
+        """
+        A* Search
+        Sorts queue based on heuristic that is a sum of:
+            distance from last point to end point, and
+            total distance traveled so far
+
+        Inputs:
+            start_point: Point
+            end_point: Point
+            map: nd numpy array (from OccupancyGrid)
+
+        Output:
+            list of Points
+        """
         queue = []
         # length 3 tuple of (distance to end, length of path, list of points in path)
         queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
@@ -230,10 +280,25 @@ class PathPlan(object):
         pass
 
     def plan_path(self, start_point, end_point, map):
+        """
+        Plans a path from the start point to the end point.
+
+        Inputs:
+            start_point: Point
+            end_point: Point
+            map: nd numpy array (from OccupancyGrid)
+
+        Output:
+            returns nothing
+            updates self.trajectory
+            publishes self.trajectory
+            visualizes self.trajectory
+
+        """
         ## CODE FOR PATH PLANNING ##
 
-        if start_point == end_point:
-            # if for some reason the start and end point are the same,
+        if abs(start_point.x - end_point.x) < 0.001 and abs(start_point.y - end_point.y) < 0.001:
+            # if for some reason the start and end point are the same (1 mm tolerance),
             # then do nothing
             return
 
@@ -251,10 +316,7 @@ class PathPlan(object):
         # profit 
 
         for point in path:
-            new_point = Point()
-            new_point_xy = self.convert_uv_to_xy(point)
-            new_point.x = new_point_xy[0]
-            new_point.y = new_point_xy[1]
+            new_point = self.convert_uv_to_xy(point)
             self.trajectory.addPoint(new_point)
 
         ## ##
