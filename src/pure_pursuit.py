@@ -16,13 +16,15 @@ class PurePursuit(object):
     """
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic")
-        self.lookahead        = # FILL IN #
+        self.lookahead        = rospy.get_param("~lookahead", .5)# FILL IN #
         self.speed            = # FILL IN #
         self.wrap             = # FILL IN #
         self.wheelbase_length = # FILL IN #
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+        self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
+        self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -32,48 +34,56 @@ class PurePursuit(object):
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
-    def drive(self, current_pose, goal_pose):
+
+    def drive(self, msg):
         ''' Computes the steering angle and speed for the robot to follow the given
             trajectory.
         '''
         # FILL IN #
+        # Get current pose
+        current_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.w)
         # Find closest point on trajectory
         closest_point = self.find_closest_point_on_trajectory(current_pose)
         # Find lookahead point
-        lookahead_point = self.find_lookahead_point(closest_point)
+        lookahead_point = self.find_lookahead_point(current_pose, closest_point)
         # Compute the steering angle and speed
         steering_angle = self.compute_steering_angle()
         # Publish the drive command
         # Return the drive command
 
     def find_closest_point_on_trajectory(self, current_pose):
-        ''' Computes the closest point on the trajectory to the given pose.
+        ''' Computes the closest point on the trajectory to the given pose. RETURN THE INDEX
         '''
-        # FILL IN #
+        # FILL IN # ALEX
         # Compute the closest point on the trajectory to the given pose
         # https://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment/1501725#1501725
         # Return the closest point and segment on the trajectory
 
-    def find_lookahead_point(self, start_point):
+    def find_lookahead_point(self, current_pose, start_point_idx):
         ''' Computes the lookahead point for the given trajectory. The lookahead point
-            is the point on the trajectory that is closest to the intersection of the 
+            is the point on the trajectory that is closest to the intersection of the
             circle defined by the robot's current position and the lookahead radius.
         '''
-        # FILL IN #
-        # Note: Only look at points further ahead on the trajectory than the 
+        # FILL IN # JORDAN
+        # Note: Only look at points further ahead on the trajectory than the
         # point returned by find_closest_point_on_trajectory
+        points = self.trajectory.points[start_point_idx:]
+        distances = self.trajectory.distances[start_point_idx:]
+
+
         # Compute the lookahead point
+
         # Return the lookahead point
 
     def compute_steering_angle(self):
         ''' Computes the steering angle for the robot to follow the given trajectory.
         '''
-        # FILL IN #
-        # Compute eta - use a dot b = |a|*|b|*cos(eta) where a is our forward velocity and 
+        # FILL IN # KYRI
+        # Compute eta - use a dot b = |a|*|b|*cos(eta) where a is our forward velocity and
         # b is the vector from the robot to the lookahead point
         # Compute the steering angle
 
-    
+
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
