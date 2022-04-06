@@ -72,12 +72,8 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-<<<<<<< HEAD
-        self.start = [msg.pose.pose.position.x, msg.pose.pose.position.y] # [x, y]
-=======
         start_xy = msg.pose.pose.position
         self.start = self.convert_xy_to_uv(start_xy)
->>>>>>> 7a1bff2714f337a253ef3c9a1449591c9ed22669
 
 
     def goal_cb(self, msg):
