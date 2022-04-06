@@ -9,6 +9,7 @@ import tf
 from geometry_msgs.msg import PoseArray, PoseStamped, Point32
 from visualization_msgs.msg import Marker
 from ackermann_msgs.msg import AckermannDriveStamped
+from sensor_msgs.msg import PointCloud
 from nav_msgs.msg import Odometry
 
 class PurePursuit(object):
@@ -17,15 +18,15 @@ class PurePursuit(object):
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic")
         self.lookahead        = rospy.get_param("~lookahead", .5)# FILL IN #
-        self.speed            = # FILL IN #
-        self.wrap             = # FILL IN #
-        self.wheelbase_length = # FILL IN #
+        self.speed            = 0# FILL IN #
+        self.wrap             = 0# FILL IN #
+        self.wheelbase_length = 0# FILL IN #
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
-        self.intersection_pub = rospy.Publisher("/intersection_point", Point32, queue_size=1)
+        self.intersection_pub = rospy.Publisher("/intersection_point", PointCloud, queue_size=1)
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -42,9 +43,11 @@ class PurePursuit(object):
         '''
         # FILL IN #
         # Get current pose
+        rospy.loginfo("DRIVING")
         current_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.w)
         # Find closest point on trajectory
-        closest_point = self.find_closest_point_on_trajectory(current_pose)
+        # closest_point = self.find_closest_point_on_trajectory(current_pose)
+        closest_point = 0
         # Find lookahead point
         lookahead_point = self.find_lookahead_point(current_pose, closest_point)
         # Compute the steering angle and speed
@@ -69,7 +72,7 @@ class PurePursuit(object):
             closest_points.append(closest_point)
         closest_index = np.argmin(np.linalg.norm(np.array(closest_points) - current_point, axis=1))
         return closest_index
-        
+
 
     def find_lookahead_point(self, current_pose, start_point_idx):
         ''' Computes the lookahead point for the given trajectory. The lookahead point
@@ -82,6 +85,7 @@ class PurePursuit(object):
         points = self.trajectory.points[start_point_idx:]
         distances = self.trajectory.distances[start_point_idx:]
         center = current_pose[:-1]
+        rospy.loginfo("get lookahead")
 
         # Compute the lookahead point
         # NOT IN A FUNCTION TO REDUCE OVERHEAD
@@ -104,10 +108,13 @@ class PurePursuit(object):
                 # When both intersect which to choose?
                 t = max(0, min(1, - b / (2 * a)))
                 res = p1 + t * V
-                p = Point32()
-                p.x = res[0]
-                p.y = res[1]
-                self.intersection_pub.publish(p)
+                cloud = PointCloud()
+                cloud.header.frame_id = "/map"
+                cloud.points = [Point32()]
+                cloud[0].x = res[0]
+                cloud[0].y = res[1]
+                rospy.loginfo("found point")
+                self.intersection_pub.publish(cloud)
                 return res
         # Intersection not found, how to find point to go to?
         rospy.loginfo("COULD NOT FIND INTERSECTION DO SOMETHING")
