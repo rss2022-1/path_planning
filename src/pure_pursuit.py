@@ -21,10 +21,13 @@ class PurePursuit(object):
         self.wrap             = 0
         self.wheelbase_length = 0
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
-        # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        # self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
-        # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        # self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
+        self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
+        self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+        self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
+        self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
+        self.current_pose = None
+        self.prev_pose = None
+        self.more_prev_pose = None 
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -34,20 +37,22 @@ class PurePursuit(object):
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
-
     def drive(self, msg):
         ''' Computes the steering angle and speed for the robot to follow the given
             trajectory.
         '''
         # FILL IN #
+        # Pass back previous poses
+        self.more_prev_pose = self.prev_pose
+        self.prev_pose = self.current_pose
         # Get current pose
-        current_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.w)
-        # Find closest point index on trajectory
-        closest_point_index = self.find_closest_point_on_trajectory(current_pose)
+        self.current_pose = (msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.w)
+        # Find closest point on trajectory
+        closest_point = self.find_closest_point_on_trajectory(self.current_pose)
         # Find lookahead point
-        lookahead_point = self.find_lookahead_point(current_pose, closest_point_index)
+        lookahead_point = self.find_lookahead_point(self.current_pose, closest_point)
         # Compute the steering angle and speed
-        steering_angle = self.compute_steering_angle()
+        steering_angle = self.compute_steering_angle(lookahead_point)
         # Publish the drive command
         # Return the drive command
 
@@ -126,19 +131,27 @@ class PurePursuit(object):
         rospy.loginfo("COULD NOT FIND INTERSECTION DO SOMETHING")
         return None
 
-
-
         # Return the lookahead point
 
-    def compute_steering_angle(self):
+    def compute_steering_angle(self, lookahead_point):
         ''' Computes the steering angle for the robot to follow the given trajectory.
         '''
         # FILL IN # KYRI
         # Compute eta - use a dot b = |a|*|b|*cos(eta) where a is our forward velocity and
         # b is the vector from the robot to the lookahead point
         # Compute the steering angle
-
-
+        if self.more_prev_pose is None:
+            return 0
+        else:
+            x_curr, y_curr, _ = self.current_pose
+            x_prev, y_prev, _ = self.more_prev_pose
+            x_ref, y_ref = lookahead_point
+            car_vector = (x_curr - x_prev, y_curr, y_prev) # direction of car
+            reference_vector = (x_ref - x_curr, y_ref - y_curr) # car to reference point
+            l_1 = np.linalg.norm(reference_vector)
+            eta = np.arccos(np.dot(car_vector, reference_vector)/(np.linalg.norm(car_vector)*l_1))
+            delta = np.arctan(2 * self.wheelbase_length * np.sin(eta) / l_1) # from lecture notes 5-6
+            return delta
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
