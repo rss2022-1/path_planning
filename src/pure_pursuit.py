@@ -6,7 +6,7 @@ import time
 import utils
 import tf
 
-from geometry_msgs.msg import PoseArray, PoseStamped
+from geometry_msgs.msg import PoseArray, PoseStamped, Point32
 from visualization_msgs.msg import Marker
 from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Odometry
@@ -25,6 +25,7 @@ class PurePursuit(object):
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
+        self.intersection_pub = rospy.Publisher("/intersection_point", Point32, queue_size=1)
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -89,9 +90,15 @@ class PurePursuit(object):
                 t2 = (-b - sqrt_disc) / (2 * a)
                 if not (0 <= t1 <= 1 or 0 <= t2 <= 1):
                     continue
+                # When both intersect which to choose?
                 t = max(0, min(1, - b / (2 * a)))
-                return p1 + t * V
-        # HANDLE EDGE CASES
+                res = p1 + t * V
+                p = Point32()
+                p.x = res[0]
+                p.y = res[1]
+                self.intersection_pub.publish(p)
+                return res
+        # Intersection not found, how to find point to go to?
         rospy.loginfo("COULD NOT FIND INTERSECTION DO SOMETHING")
         return None
 
