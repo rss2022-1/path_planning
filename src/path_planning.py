@@ -23,12 +23,12 @@ class PathPlan(object):
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
         
-        self.goal = PoseStamped()
-        self.start = Pose()
+        self.goal = Point()
+        self.start = Point()
         self.map = None
         self.map_resolution = 1.0
-        self.map_origin_pos = np.zeros((3,1)) # [x, y, z]
-        self.map_origin_rot = np.zeros((4,1)) # [x, y, z, w]
+        self.map_origin_pos = np.zeros((3, 1)) # [x, y, z]
+        self.map_origin_rot = np.zeros((4, 1)) # [x, y, z, w]
         self.occupancy_threshold = 50
 
         self.search = True # True for search-based planning, False for sample-based planning
@@ -72,7 +72,8 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-        self.start = [msg.pose.pose.Point.x, msg.pose.pose.Point.y] # [x, y]
+        start_xy = msg.pose.pose.position
+        self.start = self.convert_xy_to_uv(start_xy)
 
 
     def goal_cb(self, msg):
@@ -90,7 +91,8 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-        self.goal = [msg.pose.position.x, msg.pose.position.y] # [x, y]
+        goal_xy = msg.pose.pose.position
+        self.goal = self.convert_xy_to_uv(goal_xy)
 
 
     def get_rot_matrix_from_quaternion(self, q):
@@ -133,14 +135,14 @@ class PathPlan(object):
         return transform_matrix
 
 
-    def convert_xy_to_uv(self, pose):
+    def convert_xy_to_uv(self, point):
         """
-        pose is a list of form [x, y] where x = the x coordinate and y = the y coordinate
-        returns a Point in u, v coordinate system
+        point is a Point in the xy-coordinate system
+        returns a Point in uv-coordinate system
         """
         new_pose = np.zeros(4, 1)
-        new_pose[0] = pose[0]
-        new_pose[1] = pose[1]
+        new_pose[0] = point.x
+        new_pose[1] = point.y
         new_pose[3] = 1
         translation_matrix = self.map_origin_pos
         rotation_matrix = self.get_rot_matrix_from_quaternion(self.map_origin_rot)
@@ -154,14 +156,14 @@ class PathPlan(object):
         uv_point.z = 0
         return uv_point
 
-    def convert_uv_to_xy(self, pose):
+    def convert_uv_to_xy(self, point):
         """
-        pose is a list of form [u, v] where u = the u coordinate and v = the v coordinate
-        returns a Point in x, y coordinate system
+        point is a Point in the uv-coordinate system
+        returns a Point in xy-coordinate system
         """
         new_pose = np.zeros(4, 1)
-        new_pose[0] = pose[0]
-        new_pose[1] = pose[1]
+        new_pose[0] = point.x
+        new_pose[1] = point.y
         new_pose[3] = 1
         new_pose = self.map_resolution * new_pose
         translation_matrix = self.map_origin_pos
@@ -244,8 +246,8 @@ class PathPlan(object):
     def plan_path(self, start_point, end_point, map):
         ## CODE FOR PATH PLANNING ##
 
-        if start_point == end_point:
-            # if for some reason the start and end point are the same,
+        if abs(start_point.x - end_point.x) < 0.001 and abs(start_point.y - end_point.y) < 0.001:
+            # if for some reason the start and end point are the same (1 mm tolerance),
             # then do nothing
             return
 
@@ -263,10 +265,7 @@ class PathPlan(object):
         # profit 
 
         for point in path:
-            new_point = Point()
-            new_point_xy = self.convert_uv_to_xy(point)
-            new_point.x = new_point_xy[0]
-            new_point.y = new_point_xy[1]
+            new_point = self.convert_uv_to_xy(point)
             self.trajectory.addPoint(new_point)
 
         ## ##
