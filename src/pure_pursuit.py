@@ -192,7 +192,8 @@ class PurePursuit(object):
             l_1 = np.linalg.norm(reference_vector)
             eta = np.arccos(np.dot(car_vector, reference_vector)/(np.linalg.norm(car_vector)*l_1))
             delta = np.arctan(2 * self.wheelbase_length * np.sin(eta) / l_1) # from lecture notes 5-6
-            return delta
+            sign = np.cross(car_vector, reference_vector) # determines correct steering direction
+            return sign * delta
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
