@@ -177,7 +177,7 @@ class PathPlan(object):
             distance (float)
         """
 
-        if len(start_point) != len(end_point)
+        if len(start_point) != len(end_point):
             rospy.loginfo("Unable to compute Euclidean distance.")
             return
 
