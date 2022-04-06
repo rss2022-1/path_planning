@@ -2,7 +2,7 @@
 
 import rospy
 import numpy as np
-from geometry_msgs.msg import PoseStamped, PoseArray, Pose
+from geometry_msgs.msg import PoseStamped, PoseArray, Pose, Point
 from nav_msgs.msg import Odometry, OccupancyGrid
 import rospkg
 import time, os
@@ -50,8 +50,17 @@ class PathPlan(object):
             Pose pose
             # (x, y, z, rotation about X axis, rotation about Y axis, rotation about Z axis)
             float64[36] covariance
+
+        Pose.msg
+            Point position
+            Quaternion orientation
+
+        Point.msg
+            float64 x
+            float64 y
+            float64 z
         """
-        self.start = msg.pose.pose[:3] # [x, y, z]
+        self.start = [msg.pose.pose.Point.x, msg.pose.pose.Point.y] # [x, y]
 
 
     def goal_cb(self, msg):
@@ -69,7 +78,7 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-        self.goal = [msg.pose.Point.x, msg.pose.Point.y, msg.pose.Point.z] # [x, y, z]
+        self.goal = [msg.pose.position.x, msg.pose.position.y] # [x, y]
 
 
     def convert_xy_to_uv(self, pose):
@@ -81,10 +90,16 @@ class PathPlan(object):
         # use to convert start and end positions into (u, v) frame for plan_path()
         pass 
 
+    def convert_uv_to_xy(self, pose):
+        # TODO: same as xy_to_uv, but in reverse
+        # can this handle single points and lists?
+        pass
+
     def get_euclidean_distance(self, start_point, end_point):
         """
         Calculates the Euclidean distance between two points.
         Intended for use as a heuristic.
+        Should work independent of coordinate frames.
         
         Inputs:
             start_point: position array
@@ -115,7 +130,8 @@ class PathPlan(object):
             a = point[0] + i
             for j in plus:
                 b = point[1] + j
-                if self.map[a][b] == 0: # no obstacle
+                if self.map[b][a] == 0: # no obstacles
+                    # assumes (u, v) coordinates
                     neighbors.add([a, b])
 
         return neighbors
@@ -153,15 +169,27 @@ class PathPlan(object):
             # then do nothing
             return
 
+        if not self.trajectory.empty():
+            self.trajectory.clear()
+
         if self.search: 
             path = self.astar_search(start_point, end_point, map)
         else:
             path = self.random_sampling_search(start_point, end_point, map)
-
+        
         # path will be a list of points in (u, v) coordinates
         # transform to (x, y) coordinates
         # update self.trajectory
         # profit 
+
+        for point in path:
+            new_point = Point()
+            new_point_xy = self.convert_uv_to_xy(point)
+            new_point.x = new_point_xy[0]
+            new_point.y = new_point_xy[1]
+            self.trajectory.addPoint(new_point)
+
+        ## ##
 
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
