@@ -2,7 +2,7 @@
 
 import rospy
 import numpy as np
-from geometry_msgs.msg import PoseStamped, PoseArray, Pose
+from geometry_msgs.msg import PoseStamped, PoseArray, Pose, Point
 from nav_msgs.msg import Odometry, OccupancyGrid
 import rospkg
 import time, os
@@ -90,10 +90,16 @@ class PathPlan(object):
         # use to convert start and end positions into (u, v) frame for plan_path()
         pass 
 
+    def convert_uv_to_xy(self, pose):
+        # TODO: same as xy_to_uv, but in reverse
+        # can this handle single points and lists?
+        pass
+
     def get_euclidean_distance(self, start_point, end_point):
         """
         Calculates the Euclidean distance between two points.
         Intended for use as a heuristic.
+        Should work independent of coordinate frames.
         
         Inputs:
             start_point: position array
@@ -124,7 +130,7 @@ class PathPlan(object):
             a = point[0] + i
             for j in plus:
                 b = point[1] + j
-                if self.map[a][b] == 0: # no obstacles
+                if self.map[b][a] == 0: # no obstacles
                     # assumes (u, v) coordinates
                     neighbors.add([a, b])
 
@@ -163,15 +169,27 @@ class PathPlan(object):
             # then do nothing
             return
 
+        if not self.trajectory.empty():
+            self.trajectory.clear()
+
         if self.search: 
             path = self.astar_search(start_point, end_point, map)
         else:
             path = self.random_sampling_search(start_point, end_point, map)
-
+        
         # path will be a list of points in (u, v) coordinates
         # transform to (x, y) coordinates
         # update self.trajectory
         # profit 
+
+        for point in path:
+            new_point = Point()
+            new_point_xy = self.convert_uv_to_xy(point)
+            new_point.x = new_point_xy[0]
+            new_point.y = new_point_xy[1]
+            self.trajectory.addPoint(new_point)
+
+        ## ##
 
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
