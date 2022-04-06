@@ -15,16 +15,16 @@ class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
     """
     def __init__(self):
-        self.odom_topic       = rospy.get_param("~odom_topic")
-        self.lookahead        = rospy.get_param("~lookahead", .5)# FILL IN #
-        self.speed            = # FILL IN #
-        self.wrap             = # FILL IN #
-        self.wheelbase_length = # FILL IN #
+        # self.odom_topic       = rospy.get_param("~odom_topic")
+        # self.lookahead        = rospy.get_param("~lookahead", .5)
+        self.speed            = 0
+        self.wrap             = 0
+        self.wheelbase_length = 0
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
-        self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
-        self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
+        # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
+        # self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+        # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
+        # self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -51,6 +51,14 @@ class PurePursuit(object):
         # Publish the drive command
         # Return the drive command
 
+    def test_find_closest_point_on_trajectory(self):
+        print("Testing find_closest_point_on_trajectory")
+        current_pose = [0, 0, 0]
+        self.trajectory.points = [[0, 1], [1, 1], [2, 20]]
+        closest_index = self.find_closest_point_on_trajectory(current_pose)
+        assert closest_index == 0, "Closest index should be 0, got %d" % closest_index
+        print("test_find_closest_point_on_trajectory..........OK!")
+
     def find_closest_point_on_trajectory(self, current_pose):
         ''' Computes the closest point on the trajectory to the given pose. RETURN THE INDEX
         '''
@@ -58,15 +66,27 @@ class PurePursuit(object):
         # Compute the closest point on the trajectory to the given pose
         # https://stackoverflow.com/questions/849211/shortest-distance-between-a-point-and-a-line-segment/1501725#1501725
         # Return the closest point and segment on the trajectory
+
+        # SLOW VERSION
+        # current_point = np.array([current_pose[0], current_pose[1]])
+        # closest_points = []
+        # for i in range(len(self.trajectory.points)-1):
+        #     p1 = np.array(self.trajectory.points[i])
+        #     p2 = np.array(self.trajectory.points[i+1])
+        #     t = max(0, min(1, np.dot(current_point - p1, p2 - p1) / np.linalg.norm(p2 - p1)**2))
+        #     closest_point = p1 + t * (p2 - p1)
+        #     closest_points.append(closest_point)
+        # closest_index = np.argmin(np.linalg.norm(np.array(closest_points) - current_point, axis=1))
+        # return closest_index
+
+        # FAST VERSION
         current_point = np.array([current_pose[0], current_pose[1]])
-        closest_points = []
-        for i in range(len(self.trajectory.points)-1):
-            p1 = self.trajectory.points[i]
-            p2 = self.trajectory.points[i+1]
-            t = max(0, min(1, np.dot(current_point - p1, p2 - p1) / np.linalg.norm(p2 - p1)**2))
-            closest_point = p1 + t * (p2 - p1)
-            closest_points.append(closest_point)
-        closest_index = np.argmin(np.linalg.norm(np.array(closest_points) - current_point, axis=1))
+        p1_array = np.array(self.trajectory.points[0:-1])
+        p2_array = np.array(self.trajectory.points[1:])
+        t_array = np.dot(current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array)**2
+        t_array = np.clip(t_array, 0, 1)
+        closest_points = p1_array + t_array * (p2_array - p1_array)
+        closest_index = np.argmin(np.linalg.norm(closest_points - current_point, axis=1))
         return closest_index
         
 
@@ -123,4 +143,5 @@ class PurePursuit(object):
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
     pf = PurePursuit()
+    pf.test_find_closest_point_on_trajectory()
     rospy.spin()
