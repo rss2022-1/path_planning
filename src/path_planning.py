@@ -115,7 +115,8 @@ class PathPlan(object):
             a = point[0] + i
             for j in plus:
                 b = point[1] + j
-                neighbors.add([a, b])
+                if self.map[a][b] == 0: # no obstacle
+                    neighbors.add([a, b])
 
         return neighbors
 
