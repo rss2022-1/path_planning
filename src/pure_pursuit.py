@@ -6,9 +6,10 @@ import time
 import utils
 import tf
 
-from geometry_msgs.msg import PoseArray, PoseStamped
+from geometry_msgs.msg import PoseArray, PoseStamped, Point32
 from visualization_msgs.msg import Marker
 from ackermann_msgs.msg import AckermannDriveStamped
+from sensor_msgs.msg import PointCloud
 from nav_msgs.msg import Odometry
 
 class PurePursuit(object):
@@ -17,6 +18,7 @@ class PurePursuit(object):
     def __init__(self):
         # self.odom_topic       = rospy.get_param("~odom_topic")
         # self.lookahead        = rospy.get_param("~lookahead", .5)
+        self.lookahead = 2
         self.speed            = 0
         self.wrap             = 0
         self.wheelbase_length = 0
@@ -27,7 +29,7 @@ class PurePursuit(object):
         self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
         self.current_pose = None
         self.prev_pose = None
-        self.more_prev_pose = None 
+        self.more_prev_pose = None
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -93,7 +95,7 @@ class PurePursuit(object):
         closest_points = p1_array + t_array * (p2_array - p1_array)
         closest_index = np.argmin(np.linalg.norm(closest_points - current_point, axis=1))
         return closest_index
-        
+
 
     def find_lookahead_point(self, current_pose, start_point_idx):
         ''' Computes the lookahead point for the given trajectory. The lookahead point
@@ -106,6 +108,7 @@ class PurePursuit(object):
         points = self.trajectory.points[start_point_idx:]
         distances = self.trajectory.distances[start_point_idx:]
         center = current_pose[:-1]
+        rospy.loginfo("get lookahead")
 
         # Compute the lookahead point
         # NOT IN A FUNCTION TO REDUCE OVERHEAD
@@ -123,15 +126,53 @@ class PurePursuit(object):
                 sqrt_disc = np.sqrt(disc)
                 t1 = (-b + sqrt_disc) / (2 * a)
                 t2 = (-b - sqrt_disc) / (2 * a)
-                if not (0 <= t1 <= 1 or 0 <= t2 <= 1):
+                if 0 <= t1 <= 1 and 0 <= t2 <= 1:
+                    # choose which one
+                    t = min(t1, t2)
+                elif 0 <= t1 <= 1:
+                    t = t1
+                elif 0 <= t2 <= 1:
+                    t = t2
+                else:
                     continue
-                t = max(0, min(1, - b / (2 * a)))
-                return p1 + t * V
-        # HANDLE EDGE CASES
+                res = p1 + t1 * V
+                # self.publish_point(res)
+                return res
+        # Intersection not found, how to find point to go to?
         rospy.loginfo("COULD NOT FIND INTERSECTION DO SOMETHING")
-        return None
 
-        # Return the lookahead point
+        return min(start_point_idx + 2, len(distances))
+
+    def test_compute_intersection(self):
+        print("TESTING intersection point...")
+        current_pose = np.array([0, 0, 0])
+        self.trajectory.points = np.array([[0, 0], [1, 0], [2, 0], [3,0]])
+        self.trajectory.distances = np.array([1,1,1])
+        self.lookahead = 2
+        int_point  = self.find_lookahead_point(current_pose, 0)
+        print("point: ", int_point)
+        assert int_point[0] == 2, "Closest point x should be 2, got %d" % int_point[0]
+        print("test_find_lookahead_point..........OK!")
+        print("TESTING intersection point 2....")
+        current_pose = np.array([0, 0, 0])
+        self.trajectory.points = np.array([[0, 0], [2, 0], [4, 0], [6,0]])
+        self.trajectory.distances = np.array([2,2,2])
+        self.lookahead = 3
+        int_point  = self.find_lookahead_point(current_pose, 0)
+        print("point: ", int_point)
+        assert int_point[0] == 3, "Closest point x should be 3, got %d" % int_point[0]
+        print("test_find_lookahead_point 2..........OK!")
+
+    def publish_point(self, res):
+        cloud = PointCloud()
+        cloud.header.frame_id = "/map"
+        cloud.points = [Point32()]
+        cloud.points[0].x = res[0]
+        cloud.points[0].y = res[1]
+        rospy.loginfo("found point")
+        self.intersection_pub.publish(cloud)
+
+
 
     def compute_steering_angle(self, lookahead_point):
         ''' Computes the steering angle for the robot to follow the given trajectory.
@@ -157,4 +198,5 @@ if __name__=="__main__":
     rospy.init_node("pure_pursuit")
     pf = PurePursuit()
     pf.test_find_closest_point_on_trajectory()
+    pf.test_compute_intersection()
     rospy.spin()
