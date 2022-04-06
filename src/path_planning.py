@@ -102,12 +102,31 @@ class PathPlan(object):
 
     def get_neighbors(self, point):
         """
-        Finds all neighbors to a given point.
+        Finds all viable neighbors to a given point.
+        If there is an obstacle at that location, do not include.
         """
         pass
 
     def astar_search(self, start_point, end_point, map):
-        pass
+        queue = []
+        # length 3 tuple of (distance to end, length of path, list of points in path)
+        queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
+        
+        while queue:
+            queue.sort() # sorts queue by heuristic
+            tup = queue.pop(0)
+            path = tup[-1]
+            node = tup[-1][-1]
+            if node == end_point:
+                return path
+            else:
+                for neighbor in self.get_neighbors(node):
+                    new_path = path.copy()
+                    if neighbor not in path:
+                        new_heur = self.get_euclidean_distance(neighbor, end_point)
+                        new_len = tup[1] + self.get_euclidean_distance(node, neighbor)
+                        new_path.append(neighbor)
+                        queue.append((new_heur, new_len, new_path))
 
     def random_sampling_search(self, start_point, end_point, map):
         # invoked if 1) A* too slow or 2) we gun for extra credit or 3) both
@@ -115,6 +134,11 @@ class PathPlan(object):
 
     def plan_path(self, start_point, end_point, map):
         ## CODE FOR PATH PLANNING ##
+
+        if start_point == end_point:
+            # if for some reason the start and end point are the same,
+            # then do nothing
+            return
 
         if self.search: # I think this updates self.trajectory?
             self.astar_search(start_point, end_point, map)
