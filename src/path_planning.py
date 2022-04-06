@@ -117,7 +117,7 @@ class PathPlan(object):
         rot_matrix = np.array([[r00, r01, r02],
                                [r10, r11, r12],
                                [r20, r21, r22]])
-                                
+
         return rot_matrix
 
     
@@ -134,13 +134,25 @@ class PathPlan(object):
 
 
     def convert_xy_to_uv(self, pose):
-        # TODO: apply translation and rotation inverse from:
-        # | R T |
-        # | 0 1 |
-        # divide by resolution
-
-        # use to convert start and end positions into (u, v) frame for plan_path()
-        pass 
+        """
+        pose is a list of form [x, y] where x = the x coordinate and y = the y coordinate
+        returns a Point in u, v coordinate system
+        """
+        new_pose = np.zeros(4, 1)
+        new_pose[0] = pose[0]
+        new_pose[1] = pose[1]
+        new_pose[3] = 1
+        translation_matrix = self.map_origin_pos
+        rotation_matrix = self.get_rot_matrix_from_quaternion(self.map_origin_rot)
+        transform_matrix = self.get_transformation_matrix(rotation_matrix, translation_matrix)
+        transform_inv = np.linalg.inv(transform_matrix)
+        uv_pose = transform_inv @ new_pose
+        uv_pose = uv_pose / self.map_resolution
+        uv_point = Point()
+        uv_point.x = uv_pose[0]
+        uv_point.y = uv_pose[1]
+        uv_point.z = 0
+        return uv_point
 
     def convert_uv_to_xy(self, pose):
         """
@@ -155,7 +167,7 @@ class PathPlan(object):
         translation_matrix = self.map_origin_pos
         rotation_matrix = self.get_rot_matrix_from_quaternion(self.map_origin_rot)
         transform_matrix = self.get_transformation_matrix(rotation_matrix, translation_matrix)
-        xy_pose = np.dot(transform_matrix, new_pose)
+        xy_pose = transform_matrix @ new_pose
         xy_point = Point()
         xy_point.x = xy_pose[0]
         xy_point.y = xy_pose[1]
