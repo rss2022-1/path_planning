@@ -35,6 +35,7 @@ class PathPlan(object):
 
         self.search = True # True for search-based planning, False for sample-based planning
 
+
     def map_cb(self, msg):
         """
         Converts map data into a 2D numpy array indexed by (u, v) where 
@@ -52,6 +53,7 @@ class PathPlan(object):
         self.map_origin_rot[1] = msg.info.origin.orientation.y
         self.map_origin_rot[2] = msg.info.origin.orientation.z
         self.map_origin_rot[3] = msg.info.origin.orientation.w
+
 
     def odom_cb(self, msg):
         """
@@ -159,6 +161,7 @@ class PathPlan(object):
         uv_point.z = 0
         return uv_point
 
+
     def convert_uv_to_xy(self, point):
         """
         point is a Point in the uv-coordinate system
@@ -194,6 +197,9 @@ class PathPlan(object):
         Outputs:
             distance (float)
         """
+        # TODO:
+        # - seems utterly unable to handle negative points for some reason
+        # - knowing that we are always working in u,v, should we even worry about negative points?
 
         point_diff = np.array([end_point.x-start_point.x, end_point.y-end_point.y])
 
@@ -238,6 +244,22 @@ class PathPlan(object):
 
         return new_point
 
+    def bfs_search(self, start_point, end_point, map):
+        queue = []
+        queue.append([start_point])
+
+        while queue:
+            path = queue.pop(0)
+            node = path[-1]
+            if node == end_point:
+                return path
+            else:
+                for neighbor in self.get_neighbors(node):
+                    new_path = path[:]
+                    if neighbor not in path:
+                        new_path.append(neighbor)
+                        queue.append(new_path)
+
 
     def astar_search(self, start_point, end_point, map):
         """
@@ -254,12 +276,16 @@ class PathPlan(object):
         Output:
             list of Points
         """
+        # TODO: identify why this doesn't wory
+        # theories:
+        # - heuristic incorrect 
+        # - not removing tuples from queue
         queue = []
         # length 3 tuple of (distance to end, length of path, list of points in path)
         queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
     
         while queue:
-            queue.sort() # sorts queue by heuristic
+            queue.sort() # sorts queue by heuristic, which is first element of tuples
             tup = queue.pop(0)
             path = tup[-1]
             node = tup[-1][-1]
@@ -272,8 +298,9 @@ class PathPlan(object):
                         new_len = tup[1] + self.get_euclidean_distance(node, neighbor)
                         new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
                         new_path.append(neighbor)
-                        print(new_path)
-                        queue.append((new_heur, new_len, new_path))
+                        new_tup = (new_heur, new_len, new_path)
+                        print(new_tup)
+                        queue.append(new_tup)
 
     def random_sampling_search(self, start_point, end_point, map):
         # invoked if 1) A* too slow or 2) we gun for extra credit or 3) both
@@ -343,7 +370,7 @@ class PathPlan(object):
         print("test_coordinate_conversions..........OK!")
 
     
-    def test_helper_functions(self):
+    def test_get_neighbors(self):
         test_point = self.make_new_point(3, 4)
         # seems like this test doesn't work because Point.msg's are not equivalent when comparing sets??? but are individually??
         neighbors = self.get_neighbors(test_point)
@@ -351,20 +378,38 @@ class PathPlan(object):
                         self.make_new_point(3, 3), self.make_new_point(3, 5), 
                         self.make_new_point(4, 3), self.make_new_point(4, 4), self.make_new_point(4, 5)}
         assert neighbors == known_neighbors, "neighbor sets are not the same"
+        print("test_get_neighbors...................OK!")
 
+
+    def test_get_distance(self):
+        test_point = self.make_new_point(3, 4)
         test_point_2 = self.make_new_point(6, 4)
         distance = self.get_euclidean_distance(test_point, test_point_2)
         assert distance == 3, "distance should be 3, got %d" % distance
+        test_point_3 = self.make_new_point(-2, 4)
+        distance_2 = self.get_euclidean_distance(test_point, test_point_3)
+        assert distance == 5, "distance should be 5, got %d" % distance_2 # WHY DOES THIS THROW AN ERROR
+        print("test_get_distance....................OK!")
 
-        print("test_helper_functions................OK!")
+
+    def test_bfs_search(self):
+        print("Trying BFS search")
+        path = self.bfs_search(self.make_new_point(0,0), self.make_new_point(1,5), self.map)
+        print(path)
+
+
+    def test_astar_search(self):
+        print("Testing A* search")
+        path = self.astar_search(self.make_new_point(0,0), self.make_new_point(1,5), self.map)
+        print(path)
 
 
     def test_plan_path_simple(self):
         print("Testing simple path planning")
-        self.plan_path(self.make_new_point(0, 0), self.make_new_point(3, 5), self.map)
+        self.plan_path(self.make_new_point(0, 0), self.make_new_point(1, 5), self.map)
         print(self.trajectory.points)
-
     
+
     def test_plan_path_real(self):
         """
         """
@@ -378,11 +423,16 @@ class PathPlan(object):
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
-    print('waiting for map...')
-    while pf.map is None:
-        pass
-    pf.test_coordinate_conversions()
-    pf.test_helper_functions()
+    # print('waiting for map...')
+    # while pf.map is None:
+    #     pass
+    # pf.test_coordinate_conversions()
+    # pf.test_get_neighbors()
+
+    pf.test_get_distance()
+
+    # pf.test_bfs_search()
+    # pf.test_astar_search()
 
     # pf.test_plan_path_simple()
     # print('waiting for goal...')
