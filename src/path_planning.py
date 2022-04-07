@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-from sklearn.metrics import jaccard_score
+# from sklearn.metrics import jaccard_score # what is this
+from cv2 import MARKER_TRIANGLE_DOWN
 import rospy
 import numpy as np
 from geometry_msgs.msg import PoseStamped, PoseArray, Pose, Point
@@ -16,7 +17,8 @@ class PathPlan(object):
     """
 
     def __init__(self):
-        self.odom_topic = rospy.get_param("~odom_topic")
+        # self.odom_topic = rospy.get_param("~odom_topic")
+        self.odom_topic = "/odom" # for simulation testing
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
@@ -39,9 +41,6 @@ class PathPlan(object):
         self.map[v][u] = 1 means the cell at (u, v) is occupied, while
         self.map[v][u] = 0 means it is not occupied
         """
-        # convert map data into a 2D numpy array indexed by (u,v) where 
-        # self.map[v][u] = 1 means the cell at (u, v) is occupied, while
-        # = 0 means it is not occupied
         self.map = np.reshape(msg.data, (msg.info.height, msg.info.width))
         self.map = np.where(self.map < 0, 1, self.map)
         self.map = np.where(self.map > self.occupancy_threshold, 1, 0)
@@ -53,7 +52,6 @@ class PathPlan(object):
         self.map_origin_rot[1] = msg.info.origin.orientation.y
         self.map_origin_rot[2] = msg.info.origin.orientation.z
         self.map_origin_rot[3] = msg.info.origin.orientation.w
-
 
     def odom_cb(self, msg):
         """
@@ -96,7 +94,7 @@ class PathPlan(object):
             float64 y
             float64 z
         """
-        goal_xy = msg.pose.pose.position
+        goal_xy = msg.pose.position
         self.goal = self.convert_xy_to_uv(goal_xy)
 
 
@@ -135,8 +133,8 @@ class PathPlan(object):
             | 0 1 |
         """
         homogenous_row = np.array([[0, 0, 0, 1]])
-        rot_and_transl = np.hstack(rot_matrix, transl_matrix)
-        transform_matrix = np.vstack(rot_and_transl, homogenous_row)
+        rot_and_transl = np.hstack((rot_matrix[:,0], rot_matrix[:,1], rot_matrix[:,2], transl_matrix)) # changed this
+        transform_matrix = np.vstack((rot_and_transl, homogenous_row))
         return transform_matrix
 
 
@@ -145,7 +143,7 @@ class PathPlan(object):
         point is a Point in the xy-coordinate system
         returns a Point in uv-coordinate system
         """
-        new_pose = np.zeros(4, 1)
+        new_pose = np.zeros((4, 1))
         new_pose[0] = point.x
         new_pose[1] = point.y
         new_pose[3] = 1
@@ -153,11 +151,11 @@ class PathPlan(object):
         rotation_matrix = self.get_rot_matrix_from_quaternion(self.map_origin_rot)
         transform_matrix = self.get_transformation_matrix(rotation_matrix, translation_matrix)
         transform_inv = np.linalg.inv(transform_matrix)
-        uv_pose = transform_inv @ new_pose
+        uv_pose = np.dot(transform_inv, new_pose) # previously used @?
         uv_pose = uv_pose / self.map_resolution
         uv_point = Point()
-        uv_point.x = uv_pose[0]
-        uv_point.y = uv_pose[1]
+        uv_point.x = int(uv_pose[0]) # convert to int
+        uv_point.y = int(uv_pose[1]) 
         uv_point.z = 0
         return uv_point
 
@@ -166,7 +164,7 @@ class PathPlan(object):
         point is a Point in the uv-coordinate system
         returns a Point in xy-coordinate system
         """
-        new_pose = np.zeros(4, 1)
+        new_pose = np.zeros((4, 1))
         new_pose[0] = point.x
         new_pose[1] = point.y
         new_pose[3] = 1
@@ -174,10 +172,10 @@ class PathPlan(object):
         translation_matrix = self.map_origin_pos
         rotation_matrix = self.get_rot_matrix_from_quaternion(self.map_origin_rot)
         transform_matrix = self.get_transformation_matrix(rotation_matrix, translation_matrix)
-        xy_pose = transform_matrix @ new_pose
+        xy_pose = np.dot(transform_matrix, new_pose) # previously used @?
         xy_point = Point()
-        xy_point.x = xy_pose[0]
-        xy_point.y = xy_pose[1]
+        xy_point.x = float(xy_pose[0]) # convert to float, won't be used for indexing
+        xy_point.y = float(xy_pose[1])
         xy_point.z = 0
         return xy_point
 
@@ -214,15 +212,16 @@ class PathPlan(object):
         Outputs:
             set of Points
         """
-        plus = [-1, 0, 1]
+        neighbors = set() 
 
-        neighbors = {point} 
-
-        for i in plus:  
+        for i in [-1, 0, 1]:
             a = point.x + i
-            for j in plus:
+            for j in [-1, 0, 1]:
                 b = point.y + j
-                if self.map[b][a] == 0: # no obstacles
+                # if self.map[b][a] == 0: # no obstacles
+                #     neighbors.add(self.make_new_point(a, b))
+                new_point = self.make_new_point(a, b)
+                if point != new_point:
                     neighbors.add(self.make_new_point(a, b))
 
         return neighbors
@@ -258,7 +257,7 @@ class PathPlan(object):
         queue = []
         # length 3 tuple of (distance to end, length of path, list of points in path)
         queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
-        
+    
         while queue:
             queue.sort() # sorts queue by heuristic
             tup = queue.pop(0)
@@ -268,11 +267,12 @@ class PathPlan(object):
                 return path
             else:
                 for neighbor in self.get_neighbors(node):
-                    new_path = path.copy()
+                    new_path = path[:]
                     if neighbor not in path:
-                        new_heur = self.get_euclidean_distance(neighbor, end_point)
                         new_len = tup[1] + self.get_euclidean_distance(node, neighbor)
+                        new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
                         new_path.append(neighbor)
+                        print(new_path)
                         queue.append((new_heur, new_len, new_path))
 
     def random_sampling_search(self, start_point, end_point, map):
@@ -320,15 +320,74 @@ class PathPlan(object):
             self.trajectory.addPoint(new_point)
 
         ## ##
-
+        
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
 
         # visualize trajectory Markers
         self.trajectory.publish_viz()
 
+    def test_coordinate_conversions(self):
+        """
+        Initializes random points in uv coordinates,
+        converts to xy,
+        then converts back to uv.
+        """
+        print("Testing coordinate conversions")
+        map_shape = np.shape(self.map)
+        uv_point = self.make_new_point(np.random.randint(0, map_shape[0]), np.random.randint(0, map_shape[1]))
+        xy_point = self.convert_uv_to_xy(uv_point)
+        uv_point_back_calculated = self.convert_xy_to_uv(xy_point)
+        assert uv_point.x == uv_point_back_calculated.x, "x should be %d, got %d" % (uv_point.x, uv_point_back_calculated.x)
+        assert uv_point.y == uv_point_back_calculated.y, "y should be %d, got %d" % (uv_point.y, uv_point_back_calculated.y)
+        print("test_coordinate_conversions..........OK!")
+
+    
+    def test_helper_functions(self):
+        test_point = self.make_new_point(3, 4)
+        # seems like this test doesn't work because Point.msg's are not equivalent when comparing sets??? but are individually??
+        neighbors = self.get_neighbors(test_point)
+        known_neighbors = {self.make_new_point(2, 3), self.make_new_point(2, 4), self.make_new_point(2, 5),
+                        self.make_new_point(3, 3), self.make_new_point(3, 5), 
+                        self.make_new_point(4, 3), self.make_new_point(4, 4), self.make_new_point(4, 5)}
+        assert neighbors == known_neighbors, "neighbor sets are not the same"
+
+        test_point_2 = self.make_new_point(6, 4)
+        distance = self.get_euclidean_distance(test_point, test_point_2)
+        assert distance == 3, "distance should be 3, got %d" % distance
+
+        print("test_helper_functions................OK!")
+
+
+    def test_plan_path_simple(self):
+        print("Testing simple path planning")
+        self.plan_path(self.make_new_point(0, 0), self.make_new_point(3, 5), self.map)
+        print(self.trajectory.points)
+
+    
+    def test_plan_path_real(self):
+        """
+        """
+        print("Testing path planning")
+        assert self.start.x >= 0 and self.start.y >= 0, "start point not in uv, x: %d, y: %d" % (self.start.x, self.start.y)
+        assert self.goal.x >= 0 and self.start.y >= 0, "goal point not in uv, x: %d, y: %d" % (self.goal.x, self.goal.y)
+        self.plan_path(self.start, self.goal, self.map)
+        print("Is the path visible?")
+
 
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
+    print('waiting for map...')
+    while pf.map is None:
+        pass
+    pf.test_coordinate_conversions()
+    pf.test_helper_functions()
+
+    # pf.test_plan_path_simple()
+    # print('waiting for goal...')
+    # while pf.goal.x == 0:
+    #     pass
+    # pf.test_plan_path_real()
+
     rospy.spin()
