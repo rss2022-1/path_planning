@@ -197,13 +197,14 @@ class PathPlan(object):
         Outputs:
             distance (float)
         """
-        # TODO:
-        # - seems utterly unable to handle negative points for some reason
-        # - knowing that we are always working in u,v, should we even worry about negative points?
 
-        point_diff = np.array([end_point.x-start_point.x, end_point.y-end_point.y])
+        x1 = start_point.x
+        x2 = end_point.x
 
-        return np.sqrt(np.sum(np.square(point_diff)))
+        y1 = start_point.y
+        y2 = end_point.y
+
+        return np.sqrt((x2-x1)**2 + (y2-y1)**2)
 
     def get_neighbors(self, point):
         """
@@ -283,24 +284,27 @@ class PathPlan(object):
         queue = []
         # length 3 tuple of (distance to end, length of path, list of points in path)
         queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
+        seen_points = {start_point}
     
         while queue:
             queue.sort() # sorts queue by heuristic, which is first element of tuples
             tup = queue.pop(0)
             path = tup[-1]
-            node = tup[-1][-1]
+            node = path[-1]
             if node == end_point:
                 return path
             else:
                 for neighbor in self.get_neighbors(node):
-                    new_path = path[:]
-                    if neighbor not in path:
-                        new_len = tup[1] + self.get_euclidean_distance(node, neighbor)
-                        new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
-                        new_path.append(neighbor)
-                        new_tup = (new_heur, new_len, new_path)
-                        print(new_tup)
-                        queue.append(new_tup)
+                    if neighbor not in seen_points:
+                        new_path = path[:]
+                        if neighbor not in path:
+                            new_len = tup[1] + self.get_euclidean_distance(node, neighbor)
+                            new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
+                            new_path.append(neighbor)
+                            new_tup = (new_heur, new_len, new_path)
+                            seen_points.add(neighbor)
+                            queue.append(new_tup)
+
 
     def random_sampling_search(self, start_point, end_point, map):
         # invoked if 1) A* too slow or 2) we gun for extra credit or 3) both
@@ -371,12 +375,13 @@ class PathPlan(object):
 
     
     def test_get_neighbors(self):
-        test_point = self.make_new_point(3, 4)
+        test_point = self.make_new_point(1, 1)
         # seems like this test doesn't work because Point.msg's are not equivalent when comparing sets??? but are individually??
         neighbors = self.get_neighbors(test_point)
-        known_neighbors = {self.make_new_point(2, 3), self.make_new_point(2, 4), self.make_new_point(2, 5),
-                        self.make_new_point(3, 3), self.make_new_point(3, 5), 
-                        self.make_new_point(4, 3), self.make_new_point(4, 4), self.make_new_point(4, 5)}
+        print(neighbors)
+        known_neighbors = {self.make_new_point(0, 0), self.make_new_point(1, 0), self.make_new_point(2, 0),
+                        self.make_new_point(0, 1), self.make_new_point(2, 1), 
+                        self.make_new_point(0, 2), self.make_new_point(1, 2), self.make_new_point(2, 2)}
         assert neighbors == known_neighbors, "neighbor sets are not the same"
         print("test_get_neighbors...................OK!")
 
@@ -388,7 +393,9 @@ class PathPlan(object):
         assert distance == 3, "distance should be 3, got %d" % distance
         test_point_3 = self.make_new_point(-2, 4)
         distance_2 = self.get_euclidean_distance(test_point, test_point_3)
-        assert distance == 5, "distance should be 5, got %d" % distance_2 # WHY DOES THIS THROW AN ERROR
+        assert distance_2 == 5, "distance should be 5, got %d" % distance_2
+        distance_3 = self.get_euclidean_distance(self.make_new_point(0, 0), self.make_new_point(1,1))
+        assert distance_3 == np.sqrt(2), "distance should be sqrt(2), got %d" % distance_3
         print("test_get_distance....................OK!")
 
 
@@ -423,11 +430,11 @@ class PathPlan(object):
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
-    # print('waiting for map...')
-    # while pf.map is None:
-    #     pass
-    # pf.test_coordinate_conversions()
-    # pf.test_get_neighbors()
+    print('waiting for map...')
+    while pf.map is None:
+        pass
+    pf.test_coordinate_conversions()
+    pf.test_get_neighbors()
 
     pf.test_get_distance()
 
