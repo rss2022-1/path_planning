@@ -90,9 +90,9 @@ class PurePursuit(object):
         current_point = np.array([current_pose[0], current_pose[1]])
         p1_array = np.array(self.trajectory.points[0:-1])
         p2_array = np.array(self.trajectory.points[1:])
-        t_array = np.dot(current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array)**2
+        t_array = np.einsum('ij,ij->i', current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array)**2
         t_array = np.clip(t_array, 0, 1)
-        closest_points = p1_array + t_array * (p2_array - p1_array)
+        closest_points = p1_array + np.einsum('i,ij->ij', t_array, p2_array - p1_array)
         closest_index = np.argmin(np.linalg.norm(closest_points - current_point, axis=1))
         return closest_index
 
@@ -105,9 +105,9 @@ class PurePursuit(object):
         # FILL IN # JORDAN
         # Note: Only look at points further ahead on the trajectory than the
         # point returned by find_closest_point_on_trajectory
-        points = self.trajectory.points[start_point_idx:]
-        distances = self.trajectory.distances[start_point_idx:]
-        center = current_pose[:-1]
+        points = np.array(self.trajectory.points[start_point_idx:])
+        distances = np.array(self.trajectory.distances[start_point_idx:])
+        center = np.array(current_pose[:-1])
         rospy.loginfo("get lookahead")
 
         # Compute the lookahead point
@@ -135,11 +135,26 @@ class PurePursuit(object):
                     t = t2
                 else:
                     continue
-                res = p1 + t1 * V
+                res = p1 + t * V
                 # self.publish_point(res)
                 return res
         # Intersection not found, how to find point to go to?
         rospy.loginfo("COULD NOT FIND INTERSECTION DO SOMETHING")
+        return None
+
+        # FAST VERSION
+        points = np.array(self.trajectory.points[start_point_idx:])
+        distances = np.array(self.trajectory.distances[start_point_idx:])
+        center = np.array(current_pose[:-1])
+
+        p1_array = np.array(points[0:-1])
+        p2_array = np.array(points[1:])
+        V_array = p2_array - p1_array
+        a_array = np.einsum('ij,ij->i', V_array, V_array)
+        b_array = 2 * np.einsum('ij,ij->i', V_array, p1_array-center)
+        c_array = np.einsum('ij,ij->i', p1_array, p1_array) + center.dot(center) - 2 * p1_array.dot(center) - self.lookahead**2
+        disc_array = b_array**2 - 4 * a_array * c_array
+
 
         return min(start_point_idx + 2, len(distances))
 
