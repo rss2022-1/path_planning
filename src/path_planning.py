@@ -225,11 +225,12 @@ class PathPlan(object):
             a = point.x + i
             for j in [-1, 0, 1]:
                 b = point.y + j
-                # if self.map[b][a] == 0: # no obstacles
-                #     neighbors.add(self.make_new_point(a, b))
                 new_point = self.make_new_point(a, b)
-                if point != new_point:
-                    neighbors.add(self.make_new_point(a, b))
+                ## COMMENTED OUT BECAUSE COORDINATE TRANSFORMS NEED TO BE CHECKED
+                # if self.map[b][a] == 0 and new_point != point: # no obstacles
+                #     neighbors.add(new_point)
+
+                neighbors.add(new_point)
 
         return neighbors
     
@@ -341,10 +342,6 @@ class PathPlan(object):
         else:
             path = self.random_sampling_search(start_point, end_point, map)
         
-        # path will be a list of points in (u, v) coordinates
-        # transform to (x, y) coordinates
-        # update self.trajectory
-        # profit 
 
         for point in path:
             new_point = self.convert_uv_to_xy(point)
@@ -364,14 +361,14 @@ class PathPlan(object):
         converts to xy,
         then converts back to uv.
         """
-        print("Testing coordinate conversions")
+        print("Testing random coordinate conversions")
         map_shape = np.shape(self.map)
         uv_point = self.make_new_point(np.random.randint(0, map_shape[0]), np.random.randint(0, map_shape[1]))
         xy_point = self.convert_uv_to_xy(uv_point)
         uv_point_back_calculated = self.convert_xy_to_uv(xy_point)
         assert uv_point.x == uv_point_back_calculated.x, "x should be %d, got %d" % (uv_point.x, uv_point_back_calculated.x)
         assert uv_point.y == uv_point_back_calculated.y, "y should be %d, got %d" % (uv_point.y, uv_point_back_calculated.y)
-        print("test_coordinate_conversions..........OK!")
+        print("test_coordinate_conversions..........OK!")    
 
     
     def test_get_neighbors(self):
@@ -380,7 +377,7 @@ class PathPlan(object):
         neighbors = self.get_neighbors(test_point)
         print(neighbors)
         known_neighbors = {self.make_new_point(0, 0), self.make_new_point(1, 0), self.make_new_point(2, 0),
-                        self.make_new_point(0, 1), self.make_new_point(2, 1), 
+                        self.make_new_point(0, 1), self.make_new_point(1, 1), self.make_new_point(2, 1), 
                         self.make_new_point(0, 2), self.make_new_point(1, 2), self.make_new_point(2, 2)}
         assert neighbors == known_neighbors, "neighbor sets are not the same"
         print("test_get_neighbors...................OK!")
@@ -430,13 +427,13 @@ class PathPlan(object):
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
-    print('waiting for map...')
-    while pf.map is None:
-        pass
-    pf.test_coordinate_conversions()
-    pf.test_get_neighbors()
+    # print('waiting for map...')
+    # while pf.map is None:
+    #     pass
+    # pf.test_coordinate_conversions()
+    # pf.test_get_neighbors()
 
-    pf.test_get_distance()
+    # pf.test_get_distance()
 
     # pf.test_bfs_search()
     # pf.test_astar_search()
