@@ -76,10 +76,14 @@ class PurePursuit(object):
 
     def test_find_closest_point_on_trajectory(self):
         print("Testing find_closest_point_on_trajectory")
+        # current_pose = [0, 0, 0]
+        # self.trajectory.points = [[0, 1], [1, 1], [2, 20]]
+        # closest_index = self.find_closest_point_on_trajectory(current_pose)
+        # assert closest_index == 0, "Closest index should be 0, got %d" % closest_index
         current_pose = [0, 0, 0]
-        self.trajectory.points = [[0, 1], [1, 1], [2, 20]]
+        self.trajectory.points= [[0, 100], [0, 50], [3, 50], [10, 50], [1, 1]]
         closest_index = self.find_closest_point_on_trajectory(current_pose)
-        assert closest_index == 0, "Closest index should be 0, got %d" % closest_index
+        assert closest_index == 3, "Closest index should be 11, got %d" % closest_index
         print("test_find_closest_point_on_trajectory..........OK!")
 
     def find_closest_point_on_trajectory(self, current_pose):
@@ -106,7 +110,7 @@ class PurePursuit(object):
         current_point = np.array([current_pose[0], current_pose[1]])
         p1_array = np.array(self.trajectory.points[0:-1])
         p2_array = np.array(self.trajectory.points[1:])
-        t_array = np.einsum("ij,ij->i", current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array)**2
+        t_array = np.einsum("ij,ij->i", current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array, axis=1)**2
         t_array = np.clip(t_array, 0, 1)
         closest_points = p1_array + np.einsum('i,ij->ij', t_array, p2_array-p1_array)
         closest_index = np.argmin(np.linalg.norm(closest_points - current_point, axis=1))
