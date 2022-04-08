@@ -19,7 +19,7 @@ class PurePursuit(object):
         # self.odom_topic       = rospy.get_param("~odom_topic")
         # self.lookahead        = rospy.get_param("~lookahead", .5)
         self.lookahead = 2
-        self.speed            = 3
+        self.speed            = 4
         self.wrap             = 0
         self.wheelbase_length = 0.35
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
@@ -249,10 +249,11 @@ class PurePursuit(object):
         if self.more_prev_pose is None:
             return 0
         else:
-            x_curr, y_curr, _ = self.current_pose
-            x_prev, y_prev, _ = self.more_prev_pose
+            x_curr, y_curr, theta_curr = self.current_pose
+            # x_prev, y_prev, _ = self.more_prev_pose
             x_ref, y_ref = lookahead_point
-            car_vector = (x_curr - x_prev, y_curr - y_prev) # direction of car
+            # car_vector = (x_curr - x_prev, y_curr - y_prev) # direction of car
+            car_vector = (np.cos(theta_curr), np.sin(theta_curr)) # direction of car
             # rospy.loginfo('car')
             # rospy.loginfo(car_vector)
             reference_vector = (x_ref - x_curr, y_ref - y_curr) # car to reference point
