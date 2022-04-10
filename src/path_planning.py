@@ -221,13 +221,9 @@ class PathPlan(object):
             distance (float)
         """
 
-        x1 = start_point.x
-        x2 = end_point.x
+        vector = np.array([end_point.x-start_point.x, end_point.y-start_point.y])
 
-        y1 = start_point.y
-        y2 = end_point.y
-
-        return np.sqrt((x2-x1)**2 + (y2-y1)**2)
+        return np.linalg.norm(vector)
 
 
     def get_neighbors(self, point, map_look = True):
