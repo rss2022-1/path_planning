@@ -38,6 +38,8 @@ class PathPlan(object):
 
         self.search = True # True for search-based planning, False for sample-based planning
 
+        self.map_dimensions = None
+
 
     def map_cb(self, msg):
         """
@@ -57,6 +59,8 @@ class PathPlan(object):
         self.map_origin_rot[1] = msg.info.origin.orientation.y
         self.map_origin_rot[2] = msg.info.origin.orientation.z
         self.map_origin_rot[3] = msg.info.origin.orientation.w
+
+        self.map_dimensions = (msg.info.height, msg.info.width)
 
 
     def odom_cb(self, msg):
@@ -226,7 +230,7 @@ class PathPlan(object):
         return np.linalg.norm(vector)
 
 
-    def get_neighbors(self, point, map_look = True):
+    def get_neighbors(self, point):
         """
         Finds all neighbors to a given point.
         Can exclude points with obstacles.
@@ -244,15 +248,12 @@ class PathPlan(object):
 
         for i in [-1, 0, 1]:
             a = point.x + i
-            for j in [-1, 0, 1]:
-                b = point.y + j
-                new_point = self.make_new_point(a, b)
-                
-                if map_look:
-                    if self.map[b][a] == 0: # no obstacles
+            if a <= self.map_dimensions[0] and a >= 0:
+                for j in [-1, 0, 1]:
+                    b = point.y + j
+                    if b <= self.map_dimensions[1] and b >= 0:
+                        new_point = self.make_new_point(a, b)
                         neighbors.add(new_point)
-                else:
-                    neighbors.add(new_point)
 
         return neighbors
     
@@ -283,6 +284,7 @@ class PathPlan(object):
     def bfs_search(self, start_point, end_point, map):
         """
         Written as a sanity check.
+        Don't actually use this.
         """
         queue = []
         queue.append([start_point])
@@ -319,19 +321,24 @@ class PathPlan(object):
         # length 3 tuple of (distance to end, length of path, list of points in path)
         queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
         seen_points = {start_point}
+
+        count = 0
     
         while queue:
-            queue.sort() # sorts queue by heuristic, which is first element of tuples
+            count += 1
+            queue.sort(key=lambda k: k[0]) # sorts queue by heuristic, which is first element of tuples
             tup = queue.pop(0)
             path = tup[-1]
             node = path[-1]
             if node == end_point:
+                print('Queued ' + str(count) + ' times.')
                 return path
             else:
                 for neighbor in self.get_neighbors(node):
                     if neighbor not in seen_points:
                         new_path = path[:]
-                        if neighbor not in path:
+                        if neighbor not in path and map[neighbor.y][neighbor.x] == 0:
+                            # if we haven't been there and the spot is not occupied...
                             new_len = tup[1] + self.get_euclidean_distance(node, neighbor)
                             new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
                             new_path.append(neighbor)
@@ -409,11 +416,10 @@ class PathPlan(object):
         print("test_coordinate_conversions..........OK!")    
 
     
-    def test_get_neighbors_dumb(self):
+    def test_get_neighbors(self):
         test_point = self.make_new_point(1, 1)
-        # seems like this test doesn't work because Point.msg's are not equivalent when comparing sets??? but are individually??
         neighbors = []
-        for n in self.get_neighbors(test_point, False):
+        for n in self.get_neighbors(test_point):
             neighbors.append(self.point_to_coords(n))
 
         neighbors.sort()
@@ -435,28 +441,38 @@ class PathPlan(object):
     def test_get_distance(self):
         test_point = self.make_new_point(3, 4)
         test_point_2 = self.make_new_point(6, 4)
+        test_point_3 = self.make_new_point(-2, 4)
         distance = self.get_euclidean_distance(test_point, test_point_2)
         assert distance == 3, "distance should be 3, got %d" % distance
-        test_point_3 = self.make_new_point(-2, 4)
         distance_2 = self.get_euclidean_distance(test_point, test_point_3)
         assert distance_2 == 5, "distance should be 5, got %d" % distance_2
         distance_3 = self.get_euclidean_distance(self.make_new_point(0, 0), self.make_new_point(1,1))
         assert distance_3 == np.sqrt(2), "distance should be sqrt(2), got %d" % distance_3
+
+        p4 = self.make_new_point(513, 962)
+        p5 = self.make_new_point(489, 960)
+        d4 = self.get_euclidean_distance(p4, p5)
+        assert d4 == np.sqrt((960-962)**2+(489-513)**2), "distance incorrect"
+
         print("test_get_distance....................OK!")
 
 
     def test_bfs_search(self):
-        # won't work without setting map_look to False in get_neighbors
         print("Trying BFS search")
         path = self.bfs_search(self.make_new_point(0,0), self.make_new_point(1,5), self.map)
         print(path)
 
 
     def test_astar_search(self):
-        # won't work without setting map_look to False in get_neighbors
         print("Testing A* search")
-        path = self.astar_search(self.make_new_point(0,0), self.make_new_point(1,5), self.map)
+        start_time = time.time()
+        path = self.astar_search(self.make_new_point(513,962), self.make_new_point(489,960), self.map)
+        end_time = time.time()
+        print('It took ' + str(end_time-start_time) + ' seconds to find this path.')
         print(path)
+
+        # (513, 962) --> (489, 960), (439, 970), (475 962)
+
     
 
     def test_plan_path_real(self):
@@ -471,23 +487,26 @@ class PathPlan(object):
         print("Is the path visible?")
 
 
+
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
     print('waiting for map...')
-    while pf.map is None:
+    while pf.map_dimensions is None:
         pass
-    pf.test_coordinate_conversions()
-    pf.test_get_neighbors_dumb()
-    pf.test_get_distance()
+    # pf.test_coordinate_conversions()
+    # pf.test_get_neighbors()
+    # pf.test_get_distance()
 
 
     # pf.test_bfs_search()
-    # pf.test_astar_search()
+    pf.test_astar_search()
 
-    print('waiting for goal...')
-    while pf.goal.x == 0:
-        pass
-    pf.test_plan_path_real()
+    # print('waiting for goal...')
+    # while pf.goal.x == 0:
+    #     pass
+    # pf.test_plan_path_real()
+
+    exit()
 
     rospy.spin()
