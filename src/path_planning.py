@@ -2,6 +2,7 @@
 
 # from sklearn.metrics import jaccard_score # what is this
 from cgi import test
+from lib2to3.pgen2.token import N_TOKENS
 from cv2 import MARKER_TRIANGLE_DOWN
 import rospy
 import numpy as np
@@ -9,10 +10,14 @@ from geometry_msgs.msg import PoseStamped, PoseArray, Pose, Point, PointStamped
 from nav_msgs.msg import Odometry, OccupancyGrid
 import rospkg
 import time, os
+import tf.transformations as transformations
 from utils import LineTrajectory
+rotation_q = transform_stamped.transform.rotation
+car_transform = transformations.quaternion_matrix(
+    [rotation_q.x, rotation_q.y, rotation_q.z, rotation_q.w])
 
 class PathPlan(object):
-    """ 
+    """
     Listens for goal pose published by RViz and uses it to plan a path from
     current car pose.
     """
@@ -27,7 +32,7 @@ class PathPlan(object):
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
 
         self.clicked_point_sub = rospy.Subscriber("/clicked_point", PointStamped, self.clicked_point_cb)
-        
+
         self.goal = Point()
         self.start = Point()
         self.map = None
@@ -43,14 +48,14 @@ class PathPlan(object):
 
     def map_cb(self, msg):
         """
-        Converts map data into a 2D numpy array indexed by (u, v) where 
+        Converts map data into a 2D numpy array indexed by (u, v) where
         self.map[v][u] = 1 means the cell at (u, v) is occupied, while
         self.map[v][u] = 0 means it is not occupied
         """
         self.map = np.reshape(msg.data, (msg.info.height, msg.info.width)) # sanity check these values
         self.map = np.where(self.map < 0, 1, self.map)
         self.map = np.where(self.map > self.occupancy_threshold, 1, 0)
-        
+
         self.map_resolution = msg.info.resolution # CHECK THIS
         self.map_origin_pos[0] = msg.info.origin.position.x
         self.map_origin_pos[1] = msg.info.origin.position.y
@@ -133,26 +138,26 @@ class PathPlan(object):
         q1 = q[1]
         q2 = q[2]
         q3 = q[3]
-        
+
         r00 = 2 * (q0 * q0 + q1 * q1) - 1
         r01 = 2 * (q1 * q2 - q0 * q3)
         r02 = 2 * (q1 * q3 + q0 * q2)
-        
+
         r10 = 2 * (q1 * q2 + q0 * q3)
         r11 = 2 * (q0 * q0 + q2 * q2) - 1
         r12 = 2 * (q2 * q3 - q0 * q1)
-        
+
         r20 = 2 * (q1 * q3 - q0 * q2)
         r21 = 2 * (q2 * q3 + q0 * q1)
         r22 = 2 * (q0 * q0 + q3 * q3) - 1
-        
+
         rot_matrix = np.array([[r00, r01, r02],
                                [r10, r11, r12],
                                [r20, r21, r22]])
 
         return rot_matrix
 
-    
+
     def get_transformation_matrix(self, rot_matrix, transl_matrix):
         """
         Given rotation matrix R, and translation matrix t, returns transformation matrix T:
@@ -205,7 +210,7 @@ class PathPlan(object):
         xy_pose = np.dot(transform_matrix, new_pose) # previously used @?
         xy_point = Point()
         xy_point.x = float(xy_pose[0]) # convert to float, won't be used for indexing
-        xy_point.y = float(xy_pose[1]) 
+        xy_point.y = float(xy_pose[1])
         xy_point.z = 0
         return xy_point
 
@@ -216,7 +221,7 @@ class PathPlan(object):
         Intended for use as a heuristic.
         Should work independent of coordinate frames.
         Assumes 2D points.
-        
+
         Inputs:
             start_point: Point
             end_point: Point
@@ -235,29 +240,30 @@ class PathPlan(object):
         Finds all neighbors to a given point.
         Can exclude points with obstacles.
         Assumes 2D coordinates.
-        Includes diagonals. 
+        Includes diagonals.
 
-        Inputs: 
+        Inputs:
             point: Point in u, v coordinates
             map_look: check if obstacle is at neighbor point
 
         Outputs:
             set of Points
         """
-        neighbors = set() 
+        neighbors = set()
 
         for i in [-1, 0, 1]:
             a = point.x + i
-            if a <= self.map_dimensions[0] and a >= 0:
-                for j in [-1, 0, 1]:
-                    b = point.y + j
-                    if b <= self.map_dimensions[1] and b >= 0:
-                        new_point = self.make_new_point(a, b)
+            for j in [-1, 0, 1]:
+                b = point.y + j
+                new_point = self.make_new_point(a, b)
+
+                if map_look:
+                    if self.map[b][a] == 0: # no obstacles
                         neighbors.add(new_point)
 
         return neighbors
-    
-    
+
+
     def make_new_point(self, x, y, z=0):
         """
         Given x, y, z (z opt.) coordinates, returns a point object.
@@ -272,7 +278,7 @@ class PathPlan(object):
 
     def point_to_coords(self, point):
         """
-        Input: 
+        Input:
             point: Point
         Output:
             tuple with (x, y, z) point coordinates
@@ -322,8 +328,6 @@ class PathPlan(object):
         queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
         seen_points = {start_point}
 
-        count = 0
-    
         while queue:
             count += 1
             queue.sort(key=lambda k: k[0]) # sorts queue by heuristic, which is first element of tuples
@@ -349,7 +353,45 @@ class PathPlan(object):
 
     def random_sampling_search(self, start_point, end_point, map):
         # invoked if 1) A* too slow or 2) we gun for extra credit or 3) both
+        V = set()
+        E = set()
+        V.add(start_point)
+        N = 1000
+
+
+        for i in range(N):
+            z_rand = self.sample(map)
+            z_nearest = self.nearest(V, z_rand)
+            x_new = self.steer(z_nearest, z_rand)
+            if self.collision_free(z_nearest, x_new):
+                # z_new = x_new(T)
+                V = V.add(x_new)
+                E = E.add((z_nearest, x_new))
+                if x_new == end_point:
+                    # Create trajectory by backtracking through E
+                    return self.backtrack(x_new, E)
+
+    def backtrack(self, end_point, E):
+        # generate a point list from the end point to the start point
         pass
+
+    def collision_free(self, p1, p2):
+        # return true if obstacle in between p1 and p2, false otherwise
+        pass
+
+    def nearest(self, V, point):
+        # return vertex in V that is closest to the point
+        pass
+
+    def steer(self, z_nearest, z_rand):
+        # return a point z that is closer to z_rand than z_nearest but is within delta
+        delta = 1
+        pass
+
+    def sample(self, map):
+        # randomly return a point on the map that does not have an obstacle
+        pass
+
 
 
     def plan_path(self, start_point, end_point, map):
@@ -378,19 +420,19 @@ class PathPlan(object):
         if not self.trajectory.empty():
             self.trajectory.clear()
 
-        if self.search: 
+        if self.search:
             print('starting A* search')
             path = self.astar_search(start_point, end_point, map)
         else:
             path = self.random_sampling_search(start_point, end_point, map)
-        
+
         print("Adding points to trajectory")
         for point in path:
             new_point = self.convert_uv_to_xy(point)
             self.trajectory.addPoint(new_point)
 
         ## ##
-        
+
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
 
@@ -413,10 +455,10 @@ class PathPlan(object):
         print(uv_point_back_calculated)
         assert uv_point.x == uv_point_back_calculated.x, "x should be %d, got %d" % (uv_point.x, uv_point_back_calculated.x)
         assert uv_point.y == uv_point_back_calculated.y, "y should be %d, got %d" % (uv_point.y, uv_point_back_calculated.y)
-        print("test_coordinate_conversions..........OK!")    
+        print("test_coordinate_conversions..........OK!")
 
-    
-    def test_get_neighbors(self):
+
+    def test_get_neighbors_dumb(self):
         test_point = self.make_new_point(1, 1)
         neighbors = []
         for n in self.get_neighbors(test_point):
@@ -425,13 +467,13 @@ class PathPlan(object):
         neighbors.sort()
 
         known_neighbors = {self.make_new_point(0, 0), self.make_new_point(1, 0), self.make_new_point(2, 0),
-                        self.make_new_point(0, 1), self.make_new_point(1, 1), self.make_new_point(2, 1), 
+                        self.make_new_point(0, 1), self.make_new_point(1, 1), self.make_new_point(2, 1),
                         self.make_new_point(0, 2), self.make_new_point(1, 2), self.make_new_point(2, 2)}
 
         known_neighbors_list = []
         for k in known_neighbors:
             known_neighbors_list.append(self.point_to_coords(k))
-        
+
         known_neighbors_list.sort()
 
         assert known_neighbors_list == neighbors, "neighbors are not the same"
@@ -471,9 +513,6 @@ class PathPlan(object):
         print('It took ' + str(end_time-start_time) + ' seconds to find this path.')
         print(path)
 
-        # (513, 962) --> (489, 960), (439, 970), (475 962)
-
-    
 
     def test_plan_path_real(self):
         """
