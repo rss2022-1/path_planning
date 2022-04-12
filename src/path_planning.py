@@ -3,6 +3,7 @@
 # from sklearn.metrics import jaccard_score # what is this
 from cgi import test
 from lib2to3.pgen2.token import N_TOKENS
+from turtle import distance, st
 from cv2 import MARKER_TRIANGLE_DOWN
 import rospy
 import numpy as np
@@ -12,9 +13,9 @@ import rospkg
 import time, os
 import tf.transformations as transformations
 from utils import LineTrajectory
-rotation_q = transform_stamped.transform.rotation
-car_transform = transformations.quaternion_matrix(
-    [rotation_q.x, rotation_q.y, rotation_q.z, rotation_q.w])
+# rotation_q = transform_stamped.transform.rotation
+# car_transform = transformations.quaternion_matrix(
+#     [rotation_q.x, rotation_q.y, rotation_q.z, rotation_q.w])
 
 class PathPlan(object):
     """
@@ -41,7 +42,7 @@ class PathPlan(object):
         self.map_origin_rot = np.zeros((4, 1)) # [x, y, z, w]
         self.occupancy_threshold = 50
 
-        self.search = True # True for search-based planning, False for sample-based planning
+        self.search = False # True for search-based planning, False for sample-based planning
 
         self.map_dimensions = None
 
@@ -308,68 +309,83 @@ class PathPlan(object):
                         queue.append(new_path)
 
 
-    def astar_search(self, start_point, end_point, map):
-        """
-        A* Search
-        Sorts queue based on heuristic that is a sum of:
-            distance from last point to end point, and
-            total distance traveled so far
+    # def astar_search(self, start_point, end_point, map):
+    #     """
+    #     A* Search
+    #     Sorts queue based on heuristic that is a sum of:
+    #         distance from last point to end point, and
+    #         total distance traveled so far
 
-        Inputs:
-            start_point: Point
-            end_point: Point
-            map: nd numpy array (from OccupancyGrid)
+    #     Inputs:
+    #         start_point: Point
+    #         end_point: Point
+    #         map: nd numpy array (from OccupancyGrid)
 
-        Output:
-            list of Points
-        """
-        queue = []
-        # length 3 tuple of (distance to end, length of path, list of points in path)
-        queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
-        seen_points = {start_point}
+    #     Output:
+    #         list of Points
+    #     """
+    #     queue = []
+    #     # length 3 tuple of (distance to end, length of path, list of points in path)
+    #     queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
+    #     seen_points = {start_point}
 
-        while queue:
-            count += 1
-            queue.sort(key=lambda k: k[0]) # sorts queue by heuristic, which is first element of tuples
-            tup = queue.pop(0)
-            path = tup[-1]
-            node = path[-1]
-            if node == end_point:
-                print('Queued ' + str(count) + ' times.')
-                return path
-            else:
-                for neighbor in self.get_neighbors(node):
-                    if neighbor not in seen_points:
-                        new_path = path[:]
-                        if neighbor not in path and map[neighbor.y][neighbor.x] == 0:
-                            # if we haven't been there and the spot is not occupied...
-                            new_len = tup[1] + self.get_euclidean_distance(node, neighbor)
-                            new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
-                            new_path.append(neighbor)
-                            new_tup = (new_heur, new_len, new_path)
-                            seen_points.add(neighbor)
-                            queue.append(new_tup)
+    #     while queue:
+    #         count += 1
+    #         queue.sort(key=lambda k: k[0]) # sorts queue by heuristic, which is first element of tuples
+    #         tup = queue.pop(0)
+    #         path = tup[-1]
+    #         node = path[-1]
+    #         if node == end_point:
+    #             print('Queued ' + str(count) + ' times.')
+    #             return path
+    #         else:
+    #             for neighbor in self.get_neighbors(node):
+    #                 if neighbor not in seen_points:
+    #                     new_path = path[:]
+    #                     if neighbor not in path and map[neighbor.y][neighbor.x] == 0:
+    #                         # if we haven't been there and the spot is not occupied...
+    #                         new_len = tup[1] + self.get_euclidean_distance(node, neighbor)
+    #                         new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
+    #                         new_path.append(neighbor)
+    #                         new_tup = (new_heur, new_len, new_path)
+    #                         seen_points.add(neighbor)
+    #                         queue.append(new_tup)
 
 
     def random_sampling_search(self, start_point, end_point, map):
         # invoked if 1) A* too slow or 2) we gun for extra credit or 3) both
-        V = set()
-        E = set()
-        V.add(start_point)
-        N = 1000
-
-
+        free_map = np.transpose(np.where(map==0))
+        # for i in range(len(free_map)):
+        #     assert map[free_map[i][0], free_map[i][1]] == 0
+        print(map[free_map[0][1], free_map[0][0]])
+        print(free_map.shape)
+        V = np.array([[start_point.x, start_point.y]])
+        E = {}
+        N = 100
         for i in range(N):
-            z_rand = self.sample(map)
+            z_rand = free_map[np.random.choice(free_map.shape[0])]
+            # z_rand = [z_rand[1], z_rand[0]]
             z_nearest = self.nearest(V, z_rand)
             x_new = self.steer(z_nearest, z_rand)
             if self.collision_free(z_nearest, x_new):
-                # z_new = x_new(T)
-                V = V.add(x_new)
-                E = E.add((z_nearest, x_new))
-                if x_new == end_point:
-                    # Create trajectory by backtracking through E
-                    return self.backtrack(x_new, E)
+                V = np.append(V, [x_new], axis=0)
+                start_tup = (z_nearest[0], z_nearest[1])
+                if start_tup in E:
+                    E[start_tup].append(tuple(x_new))
+                else:
+                    E[start_tup] = [tuple(x_new)]
+                # if x_new == end_point:
+                #     # Create trajectory by backtracking through E
+                #     return self.backtrack(x_new, E)
+        res = []
+        for i in range(len(V)):
+            p = Point()
+            p.x = V[i][0]
+            p.y = V[i][1]
+            res.append(p)
+        res.append(end_point)
+        return res, E
+
 
     def backtrack(self, end_point, E):
         # generate a point list from the end point to the start point
@@ -377,20 +393,23 @@ class PathPlan(object):
 
     def collision_free(self, p1, p2):
         # return true if obstacle in between p1 and p2, false otherwise
-        pass
+        return True
 
     def nearest(self, V, point):
         # return vertex in V that is closest to the point
-        pass
+        subtracted = V - point
+        return V[np.argmin(np.linalg.norm(subtracted, axis=1))]
 
     def steer(self, z_nearest, z_rand):
         # return a point z that is closer to z_rand than z_nearest but is within delta
-        delta = 1
-        pass
+        vect = z_rand - z_nearest
+        normalized_vec = vect / np.linalg.norm(vect)
+        # delta = 20
+        # nearest = z_nearest + delta * normalized_vec
+        # nearest = [int(nearest[0]), int(nearest[1])]
+        # return nearest
+        return z_rand
 
-    def sample(self, map):
-        # randomly return a point on the map that does not have an obstacle
-        pass
 
 
 
@@ -424,7 +443,8 @@ class PathPlan(object):
             print('starting A* search')
             path = self.astar_search(start_point, end_point, map)
         else:
-            path = self.random_sampling_search(start_point, end_point, map)
+            path, edges = self.random_sampling_search(start_point, end_point, map)
+            print(edges)
 
         print("Adding points to trajectory")
         for point in path:
@@ -539,12 +559,12 @@ if __name__=="__main__":
 
 
     # pf.test_bfs_search()
-    pf.test_astar_search()
+    # pf.test_astar_search()
 
-    # print('waiting for goal...')
-    # while pf.goal.x == 0:
-    #     pass
-    # pf.test_plan_path_real()
+    print('waiting for goal...')
+    while pf.goal.x == 0:
+        pass
+    pf.test_plan_path_real()
 
     exit()
 
