@@ -11,6 +11,8 @@ import rospkg
 import time, os
 from utils import LineTrajectory
 
+import cv2 
+
 class PathPlan(object):
     """ 
     Listens for goal pose published by RViz and uses it to plan a path from
@@ -48,8 +50,11 @@ class PathPlan(object):
         self.map[v][u] = 0 means it is not occupied
         """
         self.map = np.reshape(msg.data, (msg.info.height, msg.info.width)) # sanity check these values
+        # self.map = np.where(self.map < 0, 1, self.map)
+        # self.map = np.where(self.map > self.occupancy_threshold, 1, 0)
+
         self.map = np.where(self.map < 0, 1, self.map)
-        self.map = np.where(self.map > self.occupancy_threshold, 1, 0)
+        # self.map = np.where(self.map > self.occupancy_threshold, self.map, 1)
         
         self.map_resolution = msg.info.resolution # CHECK THIS
         self.map_origin_pos[0] = msg.info.origin.position.x
@@ -61,6 +66,9 @@ class PathPlan(object):
         self.map_origin_rot[3] = msg.info.origin.orientation.w
 
         self.map_dimensions = (msg.info.height, msg.info.width)
+
+        self.map = self.map.astype(np.uint8)
+        self.map = cv2.dilate(self.map, np.ones((15, 15), 'uint8'), iterations=1)
 
 
     def odom_cb(self, msg):
@@ -121,7 +129,7 @@ class PathPlan(object):
         uv_point = self.convert_xy_to_uv(msg.point)
         rospy.loginfo("Clicked point (uv): (%d, %d)", uv_point.x, uv_point.y)
         xy_point = self.convert_uv_to_xy(uv_point)
-        rospy.loginfo("Clicked point (xy): (%d, %d)", xy_point.x, xy_point.y)
+        rospy.loginfo("Occupation: %d", self.map[uv_point.y][uv_point.x])
         rospy.loginfo("----------------------------")
 
 
@@ -218,14 +226,14 @@ class PathPlan(object):
         Assumes 2D points.
         
         Inputs:
-            start_point: Point
-            end_point: Point
+            start_point: tuple
+            end_point: tuple
 
         Outputs:
             distance (float)
         """
-
-        vector = np.array([end_point.x-start_point.x, end_point.y-start_point.y])
+        if isinstance(start_point, tuple):
+            vector = np.array([end_point[0]-start_point[0], end_point[1]-start_point[1]])
 
         return np.linalg.norm(vector)
 
@@ -235,26 +243,29 @@ class PathPlan(object):
         Finds all neighbors to a given point.
         Can exclude points with obstacles.
         Assumes 2D coordinates.
-        Includes diagonals. 
+        No diagonals. 
 
         Inputs: 
-            point: Point in u, v coordinates
+            point: tuple in u, v coordinates
             map_look: check if obstacle is at neighbor point
 
         Outputs:
-            set of Points
+            set of tuples
         """
-        neighbors = set() 
 
-        for i in [-1, 0, 1]:
-            a = point.x + i
-            if a <= self.map_dimensions[0] and a >= 0:
-                for j in [-1, 0, 1]:
-                    b = point.y + j
-                    if b <= self.map_dimensions[1] and b >= 0:
-                        new_point = self.make_new_point(a, b)
-                        neighbors.add(new_point)
-
+        neighbors = set()
+        
+        for i in [-1, 1]:
+            if point[0] + i <= self.map_dimensions[1] and point[0] + i >=0:
+                new_point = (point[0] + i, point[1])
+                if self.map[new_point[1]][new_point[0]] == 0:
+                    neighbors.add(new_point)
+        for i in [-1, 1]:
+            if point[1] +i <= self.map_dimensions[0] and point[1] + i >=0:
+                new_point = (point[0], point[1] + i)
+                if self.map[new_point[1]][new_point[0]] == 0:
+                    neighbors.add(new_point)
+        
         return neighbors
     
     
@@ -275,10 +286,10 @@ class PathPlan(object):
         Input: 
             point: Point
         Output:
-            tuple with (x, y, z) point coordinates
+            tuple with (x, y) point coordinates
         """
 
-        return (point.x, point.y, point.z)
+        return (point.x, point.y)
 
 
     def bfs_search(self, start_point, end_point, map):
@@ -318,15 +329,15 @@ class PathPlan(object):
             list of Points
         """
         queue = []
-        # length 3 tuple of (distance to end, length of path, list of points in path)
+        # length 3 tuple of (heuristic, length of path, list of points in path)
         queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
         seen_points = {start_point}
 
         count = 0
     
         while queue:
-            count += 1
             queue.sort(key=lambda k: k[0]) # sorts queue by heuristic, which is first element of tuples
+
             tup = queue.pop(0)
             path = tup[-1]
             node = path[-1]
@@ -336,15 +347,19 @@ class PathPlan(object):
             else:
                 for neighbor in self.get_neighbors(node):
                     if neighbor not in seen_points:
+                        # if we haven't been there and the spot is not occupied...
                         new_path = path[:]
-                        if neighbor not in path and map[neighbor.y][neighbor.x] == 0:
-                            # if we haven't been there and the spot is not occupied...
-                            new_len = tup[1] + self.get_euclidean_distance(node, neighbor)
-                            new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
-                            new_path.append(neighbor)
-                            new_tup = (new_heur, new_len, new_path)
-                            seen_points.add(neighbor)
-                            queue.append(new_tup)
+                        new_len = tup[1] + 1
+                        new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
+                        new_path.append(neighbor)
+                        new_tup = (new_heur, new_len, new_path) # using length as a heuristic instead
+                        seen_points.add(neighbor)
+                        queue.append(new_tup)
+
+            count += 1
+
+        print('Queued ' + str(count) + ' times.')
+        print('Failed to find path.')
 
 
     def random_sampling_search(self, start_point, end_point, map):
@@ -370,8 +385,8 @@ class PathPlan(object):
         """
         ## CODE FOR PATH PLANNING ##
 
-        if abs(start_point.x - end_point.x) < 0.001 and abs(start_point.y - end_point.y) < 0.001:
-            # if for some reason the start and end point are the same (1 mm tolerance),
+        if start_point.x == end_point.x and start_point.y == end_point.y:
+            # if for some reason the start and end point are the same
             # then do nothing
             return
 
@@ -380,13 +395,14 @@ class PathPlan(object):
 
         if self.search: 
             print('starting A* search')
-            path = self.astar_search(start_point, end_point, map)
+            path = self.astar_search(self.point_to_coords(start_point), self.point_to_coords(end_point), map)
         else:
             path = self.random_sampling_search(start_point, end_point, map)
         
         print("Adding points to trajectory")
         for point in path:
-            new_point = self.convert_uv_to_xy(point)
+            uv_point = self.make_new_point(point[0], point[1])
+            new_point = self.convert_uv_to_xy(uv_point)
             self.trajectory.addPoint(new_point)
 
         ## ##
@@ -448,7 +464,6 @@ class PathPlan(object):
         assert distance_2 == 5, "distance should be 5, got %d" % distance_2
         distance_3 = self.get_euclidean_distance(self.make_new_point(0, 0), self.make_new_point(1,1))
         assert distance_3 == np.sqrt(2), "distance should be sqrt(2), got %d" % distance_3
-
         p4 = self.make_new_point(513, 962)
         p5 = self.make_new_point(489, 960)
         d4 = self.get_euclidean_distance(p4, p5)
@@ -466,13 +481,10 @@ class PathPlan(object):
     def test_astar_search(self):
         print("Testing A* search")
         start_time = time.time()
-        path = self.astar_search(self.make_new_point(513,962), self.make_new_point(489,960), self.map)
+        # path = self.astar_search(self.make_new_point(513,962), self.make_new_point(489,959), self.map)
+        path = self.astar_search((513,962), (489,959), self.map)
         end_time = time.time()
         print('It took ' + str(end_time-start_time) + ' seconds to find this path.')
-        print(path)
-
-        # (513, 962) --> (489, 960), (439, 970), (475 962)
-
     
 
     def test_plan_path_real(self):
@@ -483,9 +495,11 @@ class PathPlan(object):
         print("Going to (" + str(self.goal.x) + ", " + str(self.goal.y) + ")")
         assert self.start.x >= 0 and self.start.y >= 0, "start point not in uv, x: %d, y: %d" % (self.start.x, self.start.y)
         assert self.goal.x >= 0 and self.goal.y >= 0, "goal point not in uv, x: %d, y: %d" % (self.goal.x, self.goal.y)
+        start_time = time.time()        
         self.plan_path(self.start, self.goal, self.map)
+        end_time = time.time()
+        print('It took ' + str(end_time-start_time) + ' seconds to find this path.')
         print("Is the path visible?")
-
 
 
 if __name__=="__main__":
@@ -498,14 +512,13 @@ if __name__=="__main__":
     # pf.test_get_neighbors()
     # pf.test_get_distance()
 
-
     # pf.test_bfs_search()
-    pf.test_astar_search()
+    # pf.test_astar_search()
 
-    # print('waiting for goal...')
-    # while pf.goal.x == 0:
-    #     pass
-    # pf.test_plan_path_real()
+    print('waiting for goal...')
+    while pf.goal.x == 0:
+        pass
+    pf.test_plan_path_real()
 
     exit()
 
