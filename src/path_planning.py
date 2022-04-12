@@ -18,6 +18,7 @@ from utils import LineTrajectory
 #     [rotation_q.x, rotation_q.y, rotation_q.z, rotation_q.w])
 
 import cv2
+# from scan_simulator_2d import PyScanSimulator2D
 
 class PathPlan(object):
     """
@@ -45,6 +46,15 @@ class PathPlan(object):
         self.occupancy_threshold = 50
 
         self.search = False # True for search-based planning, False for sample-based planning
+        # Create a straight-forward laser scan from a single pose
+        self.scan_sim = PyScanSimulator2D(
+                1,
+                0,
+                0, # This is not the simulator, don't add noise
+                0.01, # This is used as an epsilon
+                0)
+
+        self.search = True # True for search-based planning, False for sample-based planning
 
         self.map_dimensions = None
 
@@ -75,6 +85,42 @@ class PathPlan(object):
 
         self.map = self.map.astype(np.uint8)
         self.map = cv2.dilate(self.map, np.ones((15, 15), 'uint8'), iterations=1)
+
+        # From localization lab:
+        # # Convert the map to a numpy array
+        # self.map = np.array(map_msg.data, np.double)/100.
+        # self.map = np.clip(self.map, 0, 1)
+        # self.map_info = map_msg.info
+
+        # # Convert the origin to a tuple
+        # origin_p = map_msg.info.origin.position
+        # origin_o = map_msg.info.origin.orientation
+        # origin_o = tf.transformations.euler_from_quaternion((
+        #         origin_o.x,
+        #         origin_o.y,
+        #         origin_o.z,
+        #         origin_o.w))
+        # origin = (origin_p.x, origin_p.y, origin_o[2])
+        # print(("map origin", origin))
+
+        # # Initialize a map with the laser scan
+        # self.scan_sim.set_map(
+        #         self.map,
+        #         map_msg.info.height,
+        #         map_msg.info.width,
+        #         map_msg.info.resolution,
+        #         origin,
+        #         0.5) # Consider anything < 0.5 to be free
+
+        # # 0: permissible, -1: unmapped, 100: blocked
+        # array_255 = np.array(map_msg.data).reshape((map_msg.info.height, map_msg.info.width))
+        # # 0: not permissible, 1: permissible
+        # self.permissible_region = np.zeros_like(array_255, dtype=bool)
+        # self.permissible_region[array_255==0] = 1
+        # # Make the map set
+        # self.map_set = True
+
+        # print("Map initialized")
 
 
     def odom_cb(self, msg):
@@ -407,9 +453,18 @@ class PathPlan(object):
         # generate a point list from the end point to the start point
         pass
 
-    def collision_free(self, p1, p2):
-        # return true if obstacle in between p1 and p2, false otherwise
-        return True
+    def collision_free(self, p0, p1):
+        # p0 is (x_0, y_0), p1 is (x_1, y_1)
+        # return true if no obstacle in between p1 and p2, false otherwise
+        x_0, y_0 = p0
+        x_1, y_1 = p1
+        dy = y_1 - y_0
+        dx = x_1 - x_0
+        theta = np.arctan(dy/dx)
+        pose = np.array([[x_0, y_0, theta]])
+        closest_dist_to_obs = self.scan_sim.scan(pose)[0] # raycast distance
+        line_dist = np.linalg.norm([dx,dy]) # distance of line
+        return line_dist > closest_dist_to_obs # entire line fits before obstacle
 
     def nearest(self, V, point):
         # return vertex in V that is closest to the point
@@ -425,9 +480,6 @@ class PathPlan(object):
         # nearest = [int(nearest[0]), int(nearest[1])]
         # return nearest
         return z_rand
-
-
-
 
     def plan_path(self, start_point, end_point, map):
         """
