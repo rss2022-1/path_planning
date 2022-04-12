@@ -79,7 +79,7 @@ class PathPlan(object):
         self.map_dimensions = (msg.info.height, msg.info.width)
 
         self.map = self.map.astype(np.uint8)
-        self.map = cv2.dilate(self.map, np.ones((15, 15), 'uint8'), iterations=1)
+        self.map = cv2.dilate(self.map, np.ones((17, 17), 'uint8'), iterations=1)
 
 
     def odom_cb(self, msg):
@@ -258,7 +258,6 @@ class PathPlan(object):
 
         Inputs: 
             point: tuple in u, v coordinates
-            map_look: check if obstacle is at neighbor point
 
         Outputs:
             set of tuples
@@ -332,12 +331,12 @@ class PathPlan(object):
             total distance traveled so far
 
         Inputs:
-            start_point: Point
-            end_point: Point
+            start_point: tuple
+            end_point: tuple
             map: nd numpy array (from OccupancyGrid)
 
         Output:
-            list of Points
+            list of tuples representing point coordinates
         """
         queue = []
         # Node of  (start, heuristic, length of path, list of points in path)
