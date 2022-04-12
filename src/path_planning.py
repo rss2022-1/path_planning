@@ -13,6 +13,17 @@ from utils import LineTrajectory
 
 import cv2 
 
+class Node:
+
+    def __init__(self, point, f, path_length, path):
+        self.point = point
+        self.path_length = path_length
+        self.f = f
+        self.path = path
+
+    def __lt__(self, other):
+        return self.f < other.f
+
 class PathPlan(object):
     """ 
     Listens for goal pose published by RViz and uses it to plan a path from
@@ -311,7 +322,7 @@ class PathPlan(object):
                     if neighbor not in path:
                         new_path.append(neighbor)
                         queue.append(new_path)
-
+ 
 
     def astar_search(self, start_point, end_point, map):
         """
@@ -329,32 +340,31 @@ class PathPlan(object):
             list of Points
         """
         queue = []
-        # length 3 tuple of (heuristic, length of path, list of points in path)
-        queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
+        # Node of  (start, heuristic, length of path, list of points in path)
+        queue.append(Node(start_point, self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
         seen_points = {start_point}
 
         count = 0
     
         while queue:
-            queue.sort(key=lambda k: k[0]) # sorts queue by heuristic, which is first element of tuples
-
-            tup = queue.pop(0)
-            path = tup[-1]
-            node = path[-1]
-            if node == end_point:
+            queue.sort(reverse=True) # sorts queue by heuristic. See Node class
+            node = queue.pop()
+            path = node.path
+            point = node.point
+            if point == end_point:
                 print('Queued ' + str(count) + ' times.')
                 return path
             else:
-                for neighbor in self.get_neighbors(node):
+                for neighbor in self.get_neighbors(point):
                     if neighbor not in seen_points:
                         # if we haven't been there and the spot is not occupied...
                         new_path = path[:]
-                        new_len = tup[1] + 1
+                        new_len = node.path_length + 1
                         new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
                         new_path.append(neighbor)
-                        new_tup = (new_heur, new_len, new_path) # using length as a heuristic instead
+                        new_node = Node(neighbor, new_heur, new_len, new_path) # using length as a heuristic instead
                         seen_points.add(neighbor)
-                        queue.append(new_tup)
+                        queue.append(new_node)
 
             count += 1
 
