@@ -13,11 +13,7 @@ import rospkg
 import time, os
 import tf.transformations as transformations
 from utils import LineTrajectory
-# rotation_q = transform_stamped.transform.rotation
-# car_transform = transformations.quaternion_matrix(
-#     [rotation_q.x, rotation_q.y, rotation_q.z, rotation_q.w])
-
-import cv2
+from scipy import ndimage
 
 class PathPlan(object):
     """
@@ -44,7 +40,7 @@ class PathPlan(object):
         self.map_origin_rot = np.zeros((4, 1)) # [x, y, z, w]
         self.occupancy_threshold = 50
 
-        self.search = False # True for search-based planning, False for sample-based planning
+        self.search = True # True for search-based planning, False for sample-based planning
 
         self.map_dimensions = None
 
@@ -73,8 +69,8 @@ class PathPlan(object):
 
         self.map_dimensions = (msg.info.height, msg.info.width)
 
-        self.map = self.map.astype(np.uint8)
-        self.map = cv2.dilate(self.map, np.ones((15, 15), 'uint8'), iterations=1)
+        structure1 = np.ones((25, 25))
+        self.map = ndimage.binary_dilation(self.map, structure=structure1, iterations=1).astype(self.map.dtype)
 
 
     def odom_cb(self, msg):

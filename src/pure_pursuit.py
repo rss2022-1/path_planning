@@ -18,14 +18,13 @@ class PurePursuit(object):
     def __init__(self):
         # self.odom_topic       = rospy.get_param("~odom_topic")
         # self.lookahead        = rospy.get_param("~lookahead", .5)
-        self.lookahead = 2
+        self.lookahead = 1
         self.speed            = 4
         self.wrap             = 0
         self.wheelbase_length = 0.35
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
-        # self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
         self.intersection_pub = rospy.Publisher('/intersection_point', PointCloud, queue_size=1)
         self.current_pose = None
@@ -37,6 +36,7 @@ class PurePursuit(object):
         ''' Clears the currently followed trajectory, and loads the new one from the message
         '''
         print "Receiving new trajectory:", len(msg.poses), "points"
+        rospy.loginfo("Receiving new trajectory: %d points", len(msg.poses))
         self.trajectory.clear()
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
@@ -56,6 +56,9 @@ class PurePursuit(object):
         ''' Computes the steering angle and speed for the robot to follow the given
             trajectory.
         '''
+        if len(self.trajectory.points) == 0:
+            rospy.loginfo("No trajectory received yet")
+            return
         # FILL IN #
         # Pass back previous poses
         self.more_prev_pose = self.prev_pose
@@ -126,94 +129,90 @@ class PurePursuit(object):
         # Note: Only look at points further ahead on the trajectory than the
         # point returned by find_closest_point_on_trajectory
 
-        points = np.array(self.trajectory.points[start_point_idx:])
-        center = np.array(current_pose[:-1])
-
-        # Compute the lookahead point
-        # NOT IN A FUNCTION TO REDUCE OVERHEAD
-        intersections = []
-        for i in range(min(len(points)-1, 3)):
-            p1 = points[i]
-            p2 = points[i+1]
-            V = p2 - p1
-            a = V.dot(V)
-            b = 2 * V.dot(p1-center)
-            c = p1.dot(p1) + center.dot(center) - 2 * p1.dot(center) - self.lookahead**2
-            disc = b**2 - 4 * a * c
-            if disc < 0:
-                continue
-            else:
-                sqrt_disc = np.sqrt(disc)
-                t1 = (-b + sqrt_disc) / (2 * a)
-                t2 = (-b - sqrt_disc) / (2 * a)
-                if 0 <= t1 <= 1 and 0 <= t2 <= 1:
-                    # choose which one
-                    t = max(t1, t2)
-                elif 0 <= t1 <= 1:
-                    t = t1
-                elif 0 <= t2 <= 1:
-                    t = t2
-                else:
-                    continue
-                intersections.append(p1 + t * V)
-        if len(intersections) == 0:
-            # Intersection not found, how to find point to go to?
-            rospy.loginfo("COULD NOT FIND INTERSECTION DO SOMETHING")
-            return None
-        res = intersections[-1]
-        self.publish_point(res)
-        return res
-
-        # s = rospy.get_time()
-        # # FAST VERSION
         # points = np.array(self.trajectory.points[start_point_idx:])
-        # distances = np.array(self.trajectory.distances[start_point_idx:])
         # center = np.array(current_pose[:-1])
 
-        # p1_array = np.array(points[0:-1])
-        # p2_array = np.array(points[1:])
-        # V_array = p2_array - p1_array
-        # a_array = np.einsum('ij,ij->i', V_array, V_array)
-        # b_array = 2 * np.einsum('ij,ij->i', V_array, p1_array-center)
-        # c_array = np.einsum('ij,ij->i', p1_array, p1_array) + center.dot(center) - 2 * p1_array.dot(center) - self.lookahead**2
-        # disc_array = b_array**2 - 4 * a_array * c_array
-        # disc_less_than_zero = disc_array < 0
-        # disc_array[disc_less_than_zero] = 0
-        # sqrt_disc_array = np.sqrt(disc_array)
-        # t1_array = (-b_array + sqrt_disc_array) / (2 * a_array)
-        # t2_array = (-b_array - sqrt_disc_array) / (2 * a_array)
-
-        # # Disregard points where determinant was less than zero (impossible to find zero)
-        # t1_array[disc_less_than_zero] = -1
-        # t2_array[disc_less_than_zero] = -1
-        # select_indices_t1 = np.where(np.logical_and(0 <= t1_array, t1_array <= 1))[0]
-        # select_indices_t2 = np.where(np.logical_and(0 <= t2_array, t2_array <= 1))[0]
-        # if not select_indices_t1.size and not select_indices_t2.size:
-        #     res = points[min(start_point_idx + 2, len(points)-1)]
-        #     self.publish_point(res)
-        #     return res
-        # elif not select_indices_t2.size:
-        #     best_ind = select_indices_t1[-1]
-        #     t = t1_array[select_indices_t1[-1]] # Take only the first of the indices since we only care about the first to appear
-        # elif not select_indices_t1.size:
-        #     best_ind = select_indices_t2[-1]
-        #     t = t2_array[select_indices_t2[-1]] # Take only the first of the indices since we only care about the first to appear
-        # else:
-        #     best_ind = max(select_indices_t1[-1], select_indices_t2[-1])
-        #     t1 = t1_array[best_ind]
-        #     t2 = t2_array[best_ind]
-        #     if 0 <= t1 <= 1 and 0 <= t2 <= 1:
-        #         t = max(t1, t2)
-        #     elif 0 <= t1 <= 1:
-        #         t = t1
-        #     elif 0 <= t2 <= 1:
-        #         t = t2
-        # res = p1_array[best_ind] + t * V_array[best_ind]
-        # e = rospy.get_time()
-        # print("time: ", e-s)
-        # rospy.loginfo("time: %f" % (e-s))
+        # # Compute the lookahead point
+        # # NOT IN A FUNCTION TO REDUCE OVERHEAD
+        # intersections = []
+        # for i in range(min(len(points)-1, 3)):
+        #     p1 = points[i]
+        #     p2 = points[i+1]
+        #     V = p2 - p1
+        #     a = V.dot(V)
+        #     b = 2 * V.dot(p1-center)
+        #     c = p1.dot(p1) + center.dot(center) - 2 * p1.dot(center) - self.lookahead**2
+        #     disc = b**2 - 4 * a * c
+        #     if disc < 0:
+        #         continue
+        #     else:
+        #         sqrt_disc = np.sqrt(disc)
+        #         t1 = (-b + sqrt_disc) / (2 * a)
+        #         t2 = (-b - sqrt_disc) / (2 * a)
+        #         if 0 <= t1 <= 1 and 0 <= t2 <= 1:
+        #             # choose which one
+        #             t = max(t1, t2)
+        #         elif 0 <= t1 <= 1:
+        #             t = t1
+        #         elif 0 <= t2 <= 1:
+        #             t = t2
+        #         else:
+        #             continue
+        #         intersections.append(p1 + t * V)
+        # if len(intersections) == 0:
+        #     # Intersection not found, how to find point to go to?
+        #     rospy.loginfo("COULD NOT FIND INTERSECTION DO SOMETHING")
+        #     return None
+        # res = intersections[-1]
         # self.publish_point(res)
         # return res
+
+        # FAST VERSION
+        points = np.array(self.trajectory.points[start_point_idx:])
+        distances = np.array(self.trajectory.distances[start_point_idx:])
+        center = np.array(current_pose[:-1])
+
+        p1_array = np.array(points[0:-1])
+        p2_array = np.array(points[1:])
+        V_array = p2_array - p1_array
+        a_array = np.einsum('ij,ij->i', V_array, V_array)
+        b_array = 2 * np.einsum('ij,ij->i', V_array, p1_array-center)
+        c_array = np.einsum('ij,ij->i', p1_array, p1_array) + center.dot(center) - 2 * p1_array.dot(center) - self.lookahead**2
+        disc_array = b_array**2 - 4 * a_array * c_array
+        disc_less_than_zero = disc_array < 0
+        disc_array[disc_less_than_zero] = 0
+        sqrt_disc_array = np.sqrt(disc_array)
+        t1_array = (-b_array + sqrt_disc_array) / (2 * a_array)
+        t2_array = (-b_array - sqrt_disc_array) / (2 * a_array)
+
+        # Disregard points where determinant was less than zero (impossible to find zero)
+        t1_array[disc_less_than_zero] = -1
+        t2_array[disc_less_than_zero] = -1
+        select_indices_t1 = np.where(np.logical_and(0 <= t1_array, t1_array <= 1))[0]
+        select_indices_t2 = np.where(np.logical_and(0 <= t2_array, t2_array <= 1))[0]
+        if not select_indices_t1.size and not select_indices_t2.size:
+            res = points[min(start_point_idx + 2, len(points)-1)]
+            self.publish_point(res)
+            return res
+        elif not select_indices_t2.size:
+            best_ind = select_indices_t1[-1]
+            t = t1_array[select_indices_t1[-1]] # Take only the first of the indices since we only care about the first to appear
+        elif not select_indices_t1.size:
+            best_ind = select_indices_t2[-1]
+            t = t2_array[select_indices_t2[-1]] # Take only the first of the indices since we only care about the first to appear
+        else:
+            best_ind = max(select_indices_t1[-1], select_indices_t2[-1])
+            t1 = t1_array[best_ind]
+            t2 = t2_array[best_ind]
+            if 0 <= t1 <= 1 and 0 <= t2 <= 1:
+                t = max(t1, t2)
+            elif 0 <= t1 <= 1:
+                t = t1
+            elif 0 <= t2 <= 1:
+                t = t2
+        res = p1_array[best_ind] + t * V_array[best_ind]
+        # self.publish_point(res)
+        return res
 
 
     def test_compute_intersection(self):
