@@ -15,7 +15,7 @@
     <param name="scan_topic" value="/scan"/>
     <param name="odom_topic" value="/vesc/odom"/>
     <param name="angle_step" value="11"/>
-    <param name="num_beams_per_particle" value="897" />
+    <param name="num_beams_per_particle" value="100" />
   </node>
   
   <!-- Launch particle filter -->
