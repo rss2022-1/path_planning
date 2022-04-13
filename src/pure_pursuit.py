@@ -56,8 +56,9 @@ class PurePursuit(object):
         ''' Computes the steering angle and speed for the robot to follow the given
             trajectory.
         '''
-        if len(self.trajectory.points) == 0:
-            rospy.loginfo("No trajectory received yet")
+        if len(self.trajectory.points) != 0:
+            rospy.loginfo("Trajectory received.") # CHANGED THIS
+        else:
             return
         # FILL IN #
         # Pass back previous poses

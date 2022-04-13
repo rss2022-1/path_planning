@@ -22,8 +22,8 @@ class PathPlan(object):
     """
 
     def __init__(self):
-        # self.odom_topic = rospy.get_param("~odom_topic")
-        self.odom_topic = "/odom" # for simulation testing
+        self.odom_topic = rospy.get_param("~odom_topic")
+        # self.odom_topic = "/odom" # for simulation testing
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
@@ -40,7 +40,7 @@ class PathPlan(object):
         self.map_origin_rot = np.zeros((4, 1)) # [x, y, z, w]
         self.occupancy_threshold = 50
 
-        self.search = False # True for search-based planning, False for sample-based planning
+        self.search = True # True for search-based planning, False for sample-based planning
         # Create a straight-forward laser scan from a single pose
         # self.scan_sim = PyScanSimulator2D(
         #         1,
@@ -78,7 +78,7 @@ class PathPlan(object):
 
         self.map_dimensions = (msg.info.height, msg.info.width)
 
-        structure1 = np.ones((25, 25))
+        structure1 = np.ones((17, 17))
         self.map = ndimage.binary_dilation(self.map, structure=structure1, iterations=1).astype(self.map.dtype)
 
         # From localization lab:
@@ -161,6 +161,7 @@ class PathPlan(object):
         """
         goal_xy = msg.pose.position
         self.goal = self.convert_xy_to_uv(goal_xy)
+        self.plan_path(self.start, self.goal, self.map)
 
 
     def clicked_point_cb(self, msg):
@@ -380,7 +381,7 @@ class PathPlan(object):
         queue.append((self.get_euclidean_distance(start_point, end_point), 0, [start_point]))
         seen_points = {start_point}
 
-        count = 0
+        # count = 0
 
         while queue:
             queue.sort(key=lambda k: k[0]) # sorts queue by heuristic, which is first element of tuples
@@ -389,7 +390,8 @@ class PathPlan(object):
             path = tup[-1]
             node = path[-1]
             if node == end_point:
-                print('Queued ' + str(count) + ' times.')
+                rospy.loginfo('Path found.')
+                # print('Queued ' + str(count) + ' times.')
                 return path
             else:
                 for neighbor in self.get_neighbors(node):
@@ -403,10 +405,10 @@ class PathPlan(object):
                         seen_points.add(neighbor)
                         queue.append(new_tup)
 
-            count += 1
+            # count += 1
 
-        print('Queued ' + str(count) + ' times.')
-        print('Failed to find path.')
+        # print('Queued ' + str(count) + ' times.')
+        rospy.loginfo('Failed to find path.')
 
 
     def random_sampling_search(self, start_point, end_point, map):
@@ -504,13 +506,14 @@ class PathPlan(object):
             self.trajectory.clear()
 
         if self.search:
-            print('starting A* search')
+            rospy.loginfo('Starting A* search')
             path = self.astar_search(self.point_to_coords(start_point), self.point_to_coords(end_point), map)
         else:
+            
             path, edges = self.random_sampling_search(start_point, end_point, map)
             print(edges)
 
-        print("Adding points to trajectory")
+        rospy.loginfo("Adding points to trajectory")
         for point in path:
             uv_point = self.make_new_point(point[0], point[1])
             new_point = self.convert_uv_to_xy(uv_point)
@@ -616,9 +619,11 @@ class PathPlan(object):
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
-    print('waiting for map...')
-    while pf.map_dimensions is None:
-        pass
+    # print('Waiting for map...')
+    # while pf.map_dimensions is None:
+    #     pass
+    # print('Map found')
+    # print(pf.map_dimensions)
     # pf.test_coordinate_conversions()
     # pf.test_get_neighbors()
     # pf.test_get_distance()
@@ -626,11 +631,11 @@ if __name__=="__main__":
     # pf.test_bfs_search()
     # pf.test_astar_search()
 
-    print('waiting for goal...')
-    while pf.goal.x == 0:
-        pass
-    pf.test_plan_path_real()
+    # print('waiting for goal...')
+    # while pf.goal.x == 0:
+    #     pass
+    # pf.test_plan_path_real()
 
-    exit()
+    # exit()
 
     rospy.spin()
