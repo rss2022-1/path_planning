@@ -22,8 +22,8 @@ class PathPlan(object):
     """
 
     def __init__(self):
-        self.odom_topic = rospy.get_param("~odom_topic")
-        # self.odom_topic = "/odom" # for simulation testing
+        # self.odom_topic = rospy.get_param("~odom_topic")
+        self.odom_topic = "/odom" # for simulation testing
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
@@ -354,6 +354,7 @@ class PathPlan(object):
         """
         queue = []
         queue.append([start_point])
+        seen_points = {start_point}
 
         while queue:
             path = queue.pop(0)
@@ -363,8 +364,9 @@ class PathPlan(object):
             else:
                 for neighbor in self.get_neighbors(node):
                     new_path = path[:]
-                    if neighbor not in path:
+                    if neighbor not in seen_points:
                         new_path.append(neighbor)
+                        seen_points.add(neighbor)
                         queue.append(new_path)
 
 
@@ -408,7 +410,7 @@ class PathPlan(object):
                         new_len = tup[1] + 1
                         new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
                         new_path.append(neighbor)
-                        new_tup = (new_heur, new_len, new_path) # using length as a heuristic instead
+                        new_tup = (new_heur, new_len, new_path) 
                         seen_points.add(neighbor)
                         queue.append(new_tup)
 
@@ -594,7 +596,6 @@ class PathPlan(object):
     def test_bfs_search(self, start_point, end_point, map):
         print("Testing BFS search")
         start_time = time.time()
-        print("Trying BFS search")
         path = self.bfs_search(start_point, end_point, map)
         end_time = time.time()
         print('It took ' + str(end_time-start_time) + ' seconds to find this path.')
@@ -629,9 +630,14 @@ if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
 
-    pf.test_coordinate_conversions()
+    print('Waiting for map...')
+    while pf.map_dimensions is None:
+        pass
+    print('Map found')
+
+    # pf.test_coordinate_conversions()
     # pf.test_get_neighbors_dumb()
-    pf.test_get_distance()
+    # pf.test_get_distance()
 
     starts = [(513, 961), (513, 961), (513, 961), (513, 961), (513, 961), (600, 466)]
     ends = [(489,959), (873, 458), (1597, 979), (903, 458), (1597, 286), (926, 287)]
