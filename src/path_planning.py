@@ -591,19 +591,23 @@ class PathPlan(object):
         print("test_get_distance....................OK!")
 
 
-    def test_bfs_search(self):
-        print("Trying BFS search")
-        path = self.bfs_search((513, 961), (489,959), self.map)
-        print(path)
-
-
-    def test_astar_search(self):
-        print("Testing A* search")
+    def test_bfs_search(self, start_point, end_point, map):
+        print("Testing BFS search")
         start_time = time.time()
-        # path = self.astar_search(self.make_new_point(513,962), self.make_new_point(489,959), self.map)
-        path = self.astar_search((513,962), (489,959), self.map)
+        print("Trying BFS search")
+        path = self.bfs_search(start_point, end_point, map)
         end_time = time.time()
         print('It took ' + str(end_time-start_time) + ' seconds to find this path.')
+        return path
+
+
+    def test_astar_search(self, start_point, end_point, map):
+        print("Testing A* search")
+        start_time = time.time()
+        path = self.astar_search(start_point, end_point, map)
+        end_time = time.time()
+        print('It took ' + str(end_time-start_time) + ' seconds to find this path.')
+        return path
 
 
     def test_plan_path_real(self):
@@ -624,13 +628,18 @@ class PathPlan(object):
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
-    # print(pf.map_dimensions)
-    # pf.test_coordinate_conversions()
-    # pf.test_get_neighbors()
-    # pf.test_get_distance()
 
-    # pf.test_bfs_search()
-    # pf.test_astar_search()
+    pf.test_coordinate_conversions()
+    # pf.test_get_neighbors_dumb()
+    pf.test_get_distance()
+
+    starts = [(513, 961), (513, 961), (513, 961), (513, 961), (513, 961), (600, 466)]
+    ends = [(489,959), (873, 458), (1597, 979), (903, 458), (1597, 286), (926, 287)]
+    for i in range(len(starts)):
+        print(str(starts[i]) + ' to ' + str(ends[i]))
+        pf.test_bfs_search(starts[i], ends[i], pf.map)
+        pf.test_astar_search(starts[i], ends[i], pf.map)
+        print("--------------------")
 
     # exit()
 
