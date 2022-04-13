@@ -77,15 +77,15 @@ class PurePursuit(object):
         # closest_point = 0
         # Find lookahead point
         lookahead_point = self.find_lookahead_point(self.current_pose, closest_point)
-        if np.linalg.norm(self.goal - lookahead_point) < .05:
-            msg = self.create_ackermann_msg(0, 0)
-            rospy.loginfo("Reached goal")
-        else:
+        # if np.linalg.norm(self.goal - lookahead_point) < .05:
+        #     msg = self.create_ackermann_msg(0, 0)
+        #     rospy.loginfo("Reached goal")
+        # else:
             # Compute the steering angle and speed
-            steering_angle = self.compute_steering_angle(lookahead_point)
-            # rospy.loginfo(steering_angle)
-            # Publish the drive command
-            msg = self.create_ackermann_msg(steering_angle)
+        steering_angle = self.compute_steering_angle(lookahead_point)
+        # rospy.loginfo(steering_angle)
+        # Publish the drive command
+        msg = self.create_ackermann_msg(steering_angle)
         # Return the drive command
         self.drive_pub.publish(msg)
 

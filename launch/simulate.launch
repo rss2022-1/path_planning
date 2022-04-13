@@ -15,10 +15,10 @@
   </node>
 
   <!-- Launch particle filter -->
-  <node pkg="localization" type="particle_filter.py" name="particle_filter" output="screen">
+  <!-- <node pkg="localization" type="particle_filter.py" name="particle_filter" output="screen">
     <rosparam command="load" file="$(find localization)/params.yaml"/>
-  </node>
-  <!-- <node pkg="localization-solution" type="particle_filter.py" name="particle_filter" output="screen">
+  </node> -->
+  <node pkg="localization-solution" type="particle_filter.py" name="particle_filter" output="screen">
     <rosparam command="load" file="$(find localization)/params.yaml"/>
     <param name="particle_filter_frame" value="/base_link_pf"/>
     <param name="map_topic" value="/map"/>
@@ -29,7 +29,7 @@
     <param name="do_viz" value="True"/>
     <param name="squash_factor" value="2.2"/>
     <param name="num_beams_per_particle" value="100"/>
-  </node> -->
+  </node>
 
   <!-- Launch pure pursuit -->
   <node pkg="lab6" type="pure_pursuit.py" name="Trajectory_follower" output="screen">

@@ -632,19 +632,11 @@ class PathPlan(object):
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
-<<<<<<< HEAD
-=======
-
->>>>>>> b03c48e7eeeb3fdb91002bbc6952833ae8c5ce8e
     print('Waiting for map...')
     while pf.map_dimensions is None:
         pass
     print('Map found')
-<<<<<<< HEAD
     # print(pf.map_dimensions)
-=======
-
->>>>>>> b03c48e7eeeb3fdb91002bbc6952833ae8c5ce8e
     # pf.test_coordinate_conversions()
     # pf.test_get_neighbors_dumb()
     # pf.test_get_distance()
