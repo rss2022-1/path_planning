@@ -18,6 +18,18 @@
   <node pkg="localization" type="particle_filter.py" name="particle_filter" output="screen">
     <rosparam command="load" file="$(find localization)/params.yaml"/>
   </node>
+  <!-- <node pkg="localization-solution" type="particle_filter.py" name="particle_filter" output="screen">
+    <rosparam command="load" file="$(find localization)/params.yaml"/>
+    <param name="particle_filter_frame" value="/base_link_pf"/>
+    <param name="map_topic" value="/map"/>
+    <param name="scan_topic" value="/scan"/>
+    <param name="odom_topic" value="/odom"/>
+    <param name="angle_step" value="1"/>
+    <param name="max_viz_particles" value="100"/>
+    <param name="do_viz" value="True"/>
+    <param name="squash_factor" value="2.2"/>
+    <param name="num_beams_per_particle" value="100"/>
+  </node> -->
 
   <!-- Launch pure pursuit -->
   <node pkg="lab6" type="pure_pursuit.py" name="Trajectory_follower" output="screen">
@@ -28,5 +40,4 @@
   <node pkg="lab6" type="path_planning.py" name="Trajectory_planner" output="screen">
 		<param name="odom_topic" value="/pf/pose/odom"/>
 	</node>
-
 </launch>

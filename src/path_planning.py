@@ -29,6 +29,7 @@ class PathPlan(object):
         self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
+        self.goal_pub = rospy.Publisher("/pure_pursuit/goal", PointStamped, queue_size=10)
 
         self.clicked_point_sub = rospy.Subscriber("/clicked_point", PointStamped, self.clicked_point_cb)
 
@@ -161,6 +162,13 @@ class PathPlan(object):
         """
         goal_xy = msg.pose.position
         self.goal = self.convert_xy_to_uv(goal_xy)
+        while pf.map_dimensions is None:
+            pass
+        msg = PointStamped()
+        msg.header.frame_id = "map"
+        msg.header.stamp = rospy.Time.now()
+        msg.point = goal_xy
+        self.goal_pub.publish(msg)
         self.plan_path(self.start, self.goal, self.map)
 
 
@@ -619,10 +627,10 @@ class PathPlan(object):
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
-    # print('Waiting for map...')
-    # while pf.map_dimensions is None:
-    #     pass
-    # print('Map found')
+    print('Waiting for map...')
+    while pf.map_dimensions is None:
+        pass
+    print('Map found')
     # print(pf.map_dimensions)
     # pf.test_coordinate_conversions()
     # pf.test_get_neighbors()

@@ -6,7 +6,7 @@ import time
 import utils
 import tf
 
-from geometry_msgs.msg import PoseArray, PoseStamped, Point32
+from geometry_msgs.msg import PoseArray, PoseStamped, Point32, PointStamped, Point
 from visualization_msgs.msg import Marker
 from ackermann_msgs.msg import AckermannDriveStamped
 from sensor_msgs.msg import PointCloud
@@ -19,7 +19,7 @@ class PurePursuit(object):
         # self.odom_topic       = rospy.get_param("~odom_topic")
         # self.lookahead        = rospy.get_param("~lookahead", .5)
         self.lookahead = 1
-        self.speed            = 4
+        self.speed            = 1
         self.wrap             = 0
         self.wheelbase_length = 0.35
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
@@ -27,11 +27,16 @@ class PurePursuit(object):
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
         self.intersection_pub = rospy.Publisher('/intersection_point', PointCloud, queue_size=1)
+        self.goal_sub = rospy.Subscriber("/pure_pursuit/goal", PointStamped, self.goal_cb, queue_size=10)
         self.current_pose = None
         self.prev_pose = None
         self.more_prev_pose = None
+        self.goal = None
         rospy.loginfo("initialized pure pursuit")
 
+    def goal_cb(self, msg):
+        self.goal = np.array([msg.point.x, msg.point.y])
+        
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
         '''
@@ -41,13 +46,13 @@ class PurePursuit(object):
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
-    def create_ackermann_msg(self, steering_angle):
+    def create_ackermann_msg(self, steering_angle, speed=None):
         msg = AckermannDriveStamped()
         msg.header.stamp = rospy.Time.now()
         msg.header.frame_id = 'map'
         msg.drive.steering_angle = steering_angle
         msg.drive.steering_angle_velocity = 0.0
-        msg.drive.speed = self.speed
+        msg.drive.speed = self.speed if speed is None else speed
         msg.drive.acceleration = 0.5
         msg.drive.jerk = 0.0
         return msg
@@ -57,7 +62,8 @@ class PurePursuit(object):
             trajectory.
         '''
         if len(self.trajectory.points) != 0:
-            rospy.loginfo("Trajectory received.") # CHANGED THIS
+            # rospy.loginfo("Trajectory received.") # CHANGED THIS
+            pass
         else:
             return
         # FILL IN #
@@ -71,11 +77,15 @@ class PurePursuit(object):
         # closest_point = 0
         # Find lookahead point
         lookahead_point = self.find_lookahead_point(self.current_pose, closest_point)
-        # Compute the steering angle and speed
-        steering_angle = self.compute_steering_angle(lookahead_point)
-        rospy.loginfo(steering_angle)
-        # Publish the drive command
-        msg = self.create_ackermann_msg(steering_angle)
+        if np.linalg.norm(self.goal - lookahead_point) < .05:
+            msg = self.create_ackermann_msg(0, 0)
+            rospy.loginfo("Reached goal")
+        else:
+            # Compute the steering angle and speed
+            steering_angle = self.compute_steering_angle(lookahead_point)
+            # rospy.loginfo(steering_angle)
+            # Publish the drive command
+            msg = self.create_ackermann_msg(steering_angle)
         # Return the drive command
         self.drive_pub.publish(msg)
 
@@ -213,7 +223,7 @@ class PurePursuit(object):
             elif 0 <= t2 <= 1:
                 t = t2
         res = p1_array[best_ind] + t * V_array[best_ind]
-        # self.publish_point(res)
+        self.publish_point(res)
         return res
 
 
@@ -254,7 +264,8 @@ class PurePursuit(object):
         if self.more_prev_pose is None:
             return 0
         else:
-            x_curr, y_curr, theta_curr = self.current_pose
+            x_curr, y_curr, pre_theta = self.current_pose
+            theta_curr = np.arccos(pre_theta)*2
             # x_prev, y_prev, _ = self.more_prev_pose
             x_ref, y_ref = lookahead_point
             # car_vector = (x_curr - x_prev, y_curr - y_prev) # direction of car
