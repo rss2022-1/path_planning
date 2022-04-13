@@ -161,6 +161,11 @@ class PathPlan(object):
         """
         goal_xy = msg.pose.position
         self.goal = self.convert_xy_to_uv(goal_xy)
+        print('Goal received.')
+        print('Waiting for map...')
+        while pf.map_dimensions is None:
+            pass
+        print('Map found')
         self.plan_path(self.start, self.goal, self.map)
 
 
@@ -274,14 +279,16 @@ class PathPlan(object):
         Assumes 2D points.
 
         Inputs:
-            start_point: tuple
-            end_point: tuple
+            start_point: tuple or Point
+            end_point: tuple or Point
 
         Outputs:
             distance (float)
         """
         if isinstance(start_point, tuple):
             vector = np.array([end_point[0]-start_point[0], end_point[1]-start_point[1]])
+        else:
+            vector = np.array([end_point.x-start_point.x, end_point.y-start_point.y])
 
         return np.linalg.norm(vector)
 
@@ -547,10 +554,8 @@ class PathPlan(object):
 
 
     def test_get_neighbors_dumb(self):
-        test_point = self.make_new_point(1, 1)
-        neighbors = []
-        for n in self.get_neighbors(test_point):
-            neighbors.append(self.point_to_coords(n))
+        test_point = (1, 1)
+        neighbors = self.get_neighbors(test_point)
 
         neighbors.sort()
 
@@ -569,17 +574,17 @@ class PathPlan(object):
 
 
     def test_get_distance(self):
-        test_point = self.make_new_point(3, 4)
-        test_point_2 = self.make_new_point(6, 4)
-        test_point_3 = self.make_new_point(-2, 4)
+        test_point = (3, 4)
+        test_point_2 = (6, 4)
+        test_point_3 = (-2, 4)
         distance = self.get_euclidean_distance(test_point, test_point_2)
         assert distance == 3, "distance should be 3, got %d" % distance
         distance_2 = self.get_euclidean_distance(test_point, test_point_3)
         assert distance_2 == 5, "distance should be 5, got %d" % distance_2
-        distance_3 = self.get_euclidean_distance(self.make_new_point(0, 0), self.make_new_point(1,1))
+        distance_3 = self.get_euclidean_distance((0, 0), (1,1))
         assert distance_3 == np.sqrt(2), "distance should be sqrt(2), got %d" % distance_3
-        p4 = self.make_new_point(513, 962)
-        p5 = self.make_new_point(489, 960)
+        p4 = (513, 962)
+        p5 = (489, 960)
         d4 = self.get_euclidean_distance(p4, p5)
         assert d4 == np.sqrt((960-962)**2+(489-513)**2), "distance incorrect"
 
@@ -588,7 +593,7 @@ class PathPlan(object):
 
     def test_bfs_search(self):
         print("Trying BFS search")
-        path = self.bfs_search(self.make_new_point(0,0), self.make_new_point(1,5), self.map)
+        path = self.bfs_search((513, 961), (489,959), self.map)
         print(path)
 
 
@@ -619,10 +624,6 @@ class PathPlan(object):
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
-    # print('Waiting for map...')
-    # while pf.map_dimensions is None:
-    #     pass
-    # print('Map found')
     # print(pf.map_dimensions)
     # pf.test_coordinate_conversions()
     # pf.test_get_neighbors()
@@ -630,11 +631,6 @@ if __name__=="__main__":
 
     # pf.test_bfs_search()
     # pf.test_astar_search()
-
-    # print('waiting for goal...')
-    # while pf.goal.x == 0:
-    #     pass
-    # pf.test_plan_path_real()
 
     # exit()
 
