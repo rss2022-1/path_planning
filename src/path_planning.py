@@ -312,17 +312,21 @@ class PathPlan(object):
         """
 
         neighbors = set()
+        for x, y in [(1, 1), (1, -1), (-1, 1), (-1, -1), (0, 1), (0, -1), (1, 0), (-1, 0)]:
+            neighbor = (point[0] + x, point[1] + y)
+            if self.map[neighbor[1]][neighbor[0]] == 0 and neighbor[0] >= 0 and neighbor[1] >= 0 and neighbor[0] < self.map_dimensions[1] and neighbor[1] < self.map_dimensions[0]:
+                neighbors.add(neighbor)
 
-        for i in [-1, 1]:
-            if point[0] + i <= self.map_dimensions[1] and point[0] + i >=0:
-                new_point = (point[0] + i, point[1])
-                if self.map[new_point[1]][new_point[0]] == 0:
-                    neighbors.add(new_point)
-        for i in [-1, 1]:
-            if point[1] +i <= self.map_dimensions[0] and point[1] + i >=0:
-                new_point = (point[0], point[1] + i)
-                if self.map[new_point[1]][new_point[0]] == 0:
-                    neighbors.add(new_point)
+        # for i in [-1, 1]:
+        #     if point[0] + i <= self.map_dimensions[1] and point[0] + i >=0:
+        #         new_point = (point[0] + i, point[1])
+        #         if self.map[new_point[1]][new_point[0]] == 0:
+        #             neighbors.add(new_point)
+        # for i in [-1, 1]:
+        #     if point[1] +i <= self.map_dimensions[0] and point[1] + i >=0:
+        #         new_point = (point[0], point[1] + i)
+        #         if self.map[new_point[1]][new_point[0]] == 0:
+        #             neighbors.add(new_point)
 
         return neighbors
 
