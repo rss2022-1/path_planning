@@ -546,8 +546,7 @@ class PathPlan(object):
         converts to xy,
         then converts back to uv.
         """
-        map_shape = np.shape(self.map)
-        uv_point = self.make_new_point(np.random.randint(0, map_shape[0]), np.random.randint(0, map_shape[1]))
+        uv_point = self.make_new_point(np.random.randint(0, self.map_dimensions[1]), np.random.randint(0, self.map_dimensions[0]))
         xy_point = self.convert_uv_to_xy(uv_point)
         uv_point_back_calculated = self.convert_xy_to_uv(xy_point)
         print(uv_point)
@@ -632,31 +631,23 @@ class PathPlan(object):
 if __name__=="__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
-<<<<<<< HEAD
-=======
-
->>>>>>> b03c48e7eeeb3fdb91002bbc6952833ae8c5ce8e
     print('Waiting for map...')
     while pf.map_dimensions is None:
         pass
     print('Map found')
-<<<<<<< HEAD
     # print(pf.map_dimensions)
-=======
-
->>>>>>> b03c48e7eeeb3fdb91002bbc6952833ae8c5ce8e
     # pf.test_coordinate_conversions()
     # pf.test_get_neighbors_dumb()
-    # pf.test_get_distance()
+    pf.test_get_distance()
 
-    # starts = [(513, 961), (513, 961), (513, 961), (513, 961), (513, 961), (600, 466)]
-    # ends = [(489,959), (873, 458), (1597, 979), (903, 458), (1597, 286), (926, 287)]
-    # for i in range(len(starts)):
-    #     print(str(starts[i]) + ' to ' + str(ends[i]))
-    #     pf.test_bfs_search(starts[i], ends[i], pf.map)
-    #     pf.test_astar_search(starts[i], ends[i], pf.map)
-    #     print("--------------------")
+    starts = [(513, 961), (513, 961), (513, 961), (513, 961), (513, 961), (600, 466)]
+    ends = [(489,959), (873, 458), (1597, 979), (903, 458), (1597, 286), (926, 287)]
+    for i in range(len(starts)):
+        print(str(starts[i]) + ' to ' + str(ends[i]))
+        pf.test_bfs_search(starts[i], ends[i], pf.map)
+        pf.test_astar_search(starts[i], ends[i], pf.map)
+        print("--------------------")
 
-    # exit()
+    exit()
 
     rospy.spin()
