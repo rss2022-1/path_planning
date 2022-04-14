@@ -18,10 +18,11 @@ class PurePursuit(object):
     def __init__(self):
         # self.odom_topic       = rospy.get_param("~odom_topic")
         # self.lookahead        = rospy.get_param("~lookahead", .5)
-        self.lookahead = 1
-        self.speed            = 1
+        self.lookahead = 1.3
+        self.speed            = 4
         self.wrap             = 0
         self.wheelbase_length = 0.35
+        self.p = .8
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
@@ -82,7 +83,7 @@ class PurePursuit(object):
         #     rospy.loginfo("Reached goal")
         # else:
             # Compute the steering angle and speed
-        steering_angle = self.compute_steering_angle(lookahead_point)
+        steering_angle = self.compute_steering_angle(lookahead_point) * self.p
         # rospy.loginfo(steering_angle)
         # Publish the drive command
         msg = self.create_ackermann_msg(steering_angle)
