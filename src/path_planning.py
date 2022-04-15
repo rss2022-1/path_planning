@@ -417,7 +417,7 @@ class PathPlan(object):
                         new_len = tup[1] + 1
                         new_heur = self.get_euclidean_distance(neighbor, end_point) + new_len
                         new_path.append(neighbor)
-                        new_tup = (new_heur, new_len, new_path) 
+                        new_tup = (new_heur, new_len, new_path)
                         seen_points.add(neighbor)
                         queue.append(new_tup)
 
@@ -525,9 +525,11 @@ class PathPlan(object):
             rospy.loginfo('Starting A* search')
             path = self.astar_search(self.point_to_coords(start_point), self.point_to_coords(end_point), map)
         else:
-            
+
             path, edges = self.random_sampling_search(start_point, end_point, map)
             print(edges)
+
+        path = self.clean_traj(path)
 
         rospy.loginfo("Adding points to trajectory")
         for point in path:
@@ -542,6 +544,28 @@ class PathPlan(object):
 
         # visualize trajectory Markers
         self.trajectory.publish_viz()
+
+    def clean_traj(self, path):
+        # remove points that are too close to each other
+        # return a list of points
+        cleaned_path = [path[0], path[7]]
+        i = 7
+        while i < len(path):
+            j = i + 2
+            while j < len(path)-1:
+                v1 = np.array(path[j]) - np.array(path[i])
+                v2 = np.array(path[j+1]) - np.array(path[j])
+                th1 = np.arctan2(v1[1], v1[0])
+                th2 = np.arctan2(v2[1], v2[0])
+                if np.abs(th1 - th2) < np.pi/5:
+                    j += 1
+                else:
+                    cleaned_path.append(path[j])
+                    break
+            i = j
+        cleaned_path.append(path[-1])
+        return cleaned_path
+
 
 
     def test_coordinate_conversions(self):
