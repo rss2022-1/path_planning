@@ -31,13 +31,21 @@
     <param name="num_beams_per_particle" value="100"/>
   </node>
 
+  <!-- Launch Line Follower -->
+  <node pkg="visual_servoing" name="parking_controller" type="parking_controller.py" output="screen">
+  	<param name="drive_topic" value="/drive" />
+  </node>
+
+  <node pkg="visual_servoing" name="cone_sim_marker" type="cone_sim_marker.py" output="screen">
+  </node>
+
   <!-- Launch pure pursuit -->
   <node pkg="lab6" type="pure_pursuit.py" name="Trajectory_follower" output="screen">
 		<param name="odom_topic" value="/pf/pose/odom"/>
 	</node>
 
   <!-- Launch path planning -->
-  <node pkg="lab6" type="path_planning.py" name="Trajectory_planner" output="screen">
+  <!-- <node pkg="lab6" type="path_planning.py" name="Trajectory_planner" output="screen">
 		<param name="odom_topic" value="/pf/pose/odom"/>
-	</node>
+	</node> -->
 </launch>

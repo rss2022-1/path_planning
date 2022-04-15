@@ -11,6 +11,8 @@ from visualization_msgs.msg import Marker
 from ackermann_msgs.msg import AckermannDriveStamped
 from sensor_msgs.msg import PointCloud
 from nav_msgs.msg import Odometry
+from visual_servoing.msg import ConeLocation, ParkingError
+
 
 class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
@@ -18,8 +20,7 @@ class PurePursuit(object):
     def __init__(self):
         # self.odom_topic       = rospy.get_param("~odom_topic")
         # self.lookahead        = rospy.get_param("~lookahead", .5)
-        self.lookahead = 1.3
-        self.speed            = 4
+        self.speed            = 1
         self.wrap             = 0
         self.wheelbase_length = 0.35
         self.p = .8
@@ -29,10 +30,13 @@ class PurePursuit(object):
         self.localization_subscriber = rospy.Subscriber("/pf/pose/odom", Odometry, self.drive, queue_size = 1)
         self.intersection_pub = rospy.Publisher('/intersection_point', PointCloud, queue_size=1)
         self.goal_sub = rospy.Subscriber("/pure_pursuit/goal", PointStamped, self.goal_cb, queue_size=10)
+        self.cone_sub = rospy.Subscriber("/relative_cone", ConeLocation, self.relative_cone_callback)
+        self.lookahead = 1.3
         self.current_pose = None
         self.prev_pose = None
         self.more_prev_pose = None
         self.goal = None
+        self.lookahed_point = None
         rospy.loginfo("initialized pure pursuit")
 
     def goal_cb(self, msg):
@@ -46,6 +50,10 @@ class PurePursuit(object):
         self.trajectory.clear()
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
+
+    def relative_cone_callback(self, msg):
+        self.lookahed_point = np.array([msg.x_pos, msg.y_pos])
+        self.lookahead = np.linalg.norm(self.lookahed_point - np.array([0, 0]))
 
     def create_ackermann_msg(self, steering_angle, speed=None):
         msg = AckermannDriveStamped()
@@ -62,11 +70,11 @@ class PurePursuit(object):
         ''' Computes the steering angle and speed for the robot to follow the given
             trajectory.
         '''
-        if len(self.trajectory.points) != 0:
-            # rospy.loginfo("Trajectory received.") # CHANGED THIS
-            pass
-        else:
-            return
+        # if len(self.trajectory.points) != 0:
+        #     # rospy.loginfo("Trajectory received.") # CHANGED THIS
+        #     pass
+        # else:
+        #     return
         # FILL IN #
         # Pass back previous poses
         self.more_prev_pose = self.prev_pose
@@ -74,21 +82,22 @@ class PurePursuit(object):
         # Get current pose
         self.current_pose = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, msg.pose.pose.orientation.w])
         # Find closest point on trajectory
-        closest_point = self.find_closest_point_on_trajectory(self.current_pose)
+        # closest_point = self.find_closest_point_on_trajectory(self.current_pose)
         # closest_point = 0
         # Find lookahead point
-        lookahead_point = self.find_lookahead_point(self.current_pose, closest_point)
+        # lookahead_point = self.find_lookahead_point(self.current_pose, closest_point)
         # if np.linalg.norm(self.goal - lookahead_point) < .05:
         #     msg = self.create_ackermann_msg(0, 0)
         #     rospy.loginfo("Reached goal")
         # else:
             # Compute the steering angle and speed
-        steering_angle = self.compute_steering_angle(lookahead_point) * self.p
-        # rospy.loginfo(steering_angle)
-        # Publish the drive command
-        msg = self.create_ackermann_msg(steering_angle)
-        # Return the drive command
-        self.drive_pub.publish(msg)
+        if self.lookahed_point is not None:
+            steering_angle = self.compute_steering_angle(self.lookahed_point) * self.p
+            # rospy.loginfo(steering_angle)
+            # Publish the drive command
+            msg = self.create_ackermann_msg(steering_angle)
+            # Return the drive command
+            self.drive_pub.publish(msg)
 
     def test_find_closest_point_on_trajectory(self):
         print("Testing find_closest_point_on_trajectory")
