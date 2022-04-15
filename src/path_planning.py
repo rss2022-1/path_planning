@@ -548,8 +548,8 @@ class PathPlan(object):
     def clean_traj(self, path):
         # remove points that are too close to each other
         # return a list of points
-        cleaned_path = [path[0]]
-        i = 0
+        cleaned_path = [path[0], path[7]]
+        i = 7
         while i < len(path):
             j = i + 2
             while j < len(path)-1:
@@ -557,7 +557,7 @@ class PathPlan(object):
                 v2 = np.array(path[j+1]) - np.array(path[j])
                 th1 = np.arctan2(v1[1], v1[0])
                 th2 = np.arctan2(v2[1], v2[0])
-                if np.abs(th1 - th2) < np.pi/4:
+                if np.abs(th1 - th2) < np.pi/5:
                     j += 1
                 else:
                     cleaned_path.append(path[j])
