@@ -18,8 +18,9 @@ class PurePursuit(object):
     def __init__(self):
         # self.odom_topic       = rospy.get_param("~odom_topic")
         # self.lookahead        = rospy.get_param("~lookahead", .5)
-        self.lookahead = 1.3
-        self.speed            = 4
+        self.speed            = 2
+        self.lookahead_mult = 7./8.
+        self.lookahead = self.lookahead_mult * self.speed
         self.wrap             = 0
         self.wheelbase_length = 0.35
         self.p = .8
@@ -37,7 +38,7 @@ class PurePursuit(object):
 
     def goal_cb(self, msg):
         self.goal = np.array([msg.point.x, msg.point.y])
-        
+
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
         '''
@@ -111,26 +112,37 @@ class PurePursuit(object):
         # Return the closest point and segment on the trajectory
 
         # SLOW VERSION
-        current_point = np.array([current_pose[0], current_pose[1]])
-        closest_points = []
-        for i in range(len(self.trajectory.points)-1):
-            p1 = np.array(self.trajectory.points[i])
-            p2 = np.array(self.trajectory.points[i+1])
-            t = max(0, min(1, np.dot(current_point - p1, p2 - p1) / np.linalg.norm(p2 - p1)**2))
-            closest_point = p1 + t * (p2 - p1)
-            closest_points.append(closest_point)
-        closest_index = np.argmin(np.linalg.norm(np.array(closest_points) - current_point, axis=1))
-        return closest_index
+        # current_point = np.array([current_pose[0], current_pose[1]])
+        # closest_points = []
+        # for i in range(len(self.trajectory.points)-1):
+        #     p1 = np.array(self.trajectory.points[i])
+        #     p2 = np.array(self.trajectory.points[i+1])
+        #     t = max(0, min(1, np.dot(current_point - p1, p2 - p1) / np.linalg.norm(p2 - p1)**2))
+        #     closest_point = p1 + t * (p2 - p1)
+        #     closest_points.append(closest_point)
+        # closest_index = np.argmin(np.linalg.norm(np.array(closest_points) - current_point, axis=1))
+
+        # return closest_index
 
         # FAST VERSION
-        # current_point = np.array([current_pose[0], current_pose[1]])
-        # p1_array = np.array(self.trajectory.points[0:-1])
-        # p2_array = np.array(self.trajectory.points[1:])
-        # t_array = np.einsum("ij,ij->i", current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array, axis=1)**2
-        # t_array = np.clip(t_array, 0, 1)
-        # closest_points = p1_array + np.einsum('i,ij->ij', t_array, p2_array-p1_array)
-        # closest_index = np.argmin(np.linalg.norm(closest_points - current_point, axis=1))
-        # return closest_index
+        current_point = np.array([current_pose[0], current_pose[1]])
+        p1_array = np.array(self.trajectory.points[0:-1])
+        p2_array = np.array(self.trajectory.points[1:])
+        t_array = np.einsum("ij,ij->i", current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array, axis=1)**2
+        t_array = np.clip(t_array, 0, 1)
+        closest_points = p1_array + np.einsum('i,ij->ij', t_array, p2_array-p1_array)
+        closest_index = np.argmin(np.linalg.norm(closest_points - current_point, axis=1))
+
+        if closest_index + 2 < len(self.trajectory.points):
+            v1 = np.array(self.trajectory.points[closest_index+1]) - np.array(self.trajectory.points[closest_index])
+            v2 = np.array(self.trajectory.points[closest_index+2]) - np.array(self.trajectory.points[closest_index+1])
+            th1 = np.arctan2(v1[1], v1[0])
+            th2 = np.arctan2(v2[1], v2[0])
+            if np.abs(th2 - th1) > np.pi/3:
+                self.lookahead = .8
+            else:
+                self.lookahead = min(self.speed * self.lookahead_mult, 3)
+        return closest_index
 
 
     def find_lookahead_point(self, current_pose, start_point_idx):

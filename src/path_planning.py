@@ -529,10 +529,7 @@ class PathPlan(object):
             path, edges = self.random_sampling_search(start_point, end_point, map)
             print(edges)
 
-
-        print(len(path))
         path = self.clean_traj(path)
-        print(len(path))
 
         rospy.loginfo("Adding points to trajectory")
         for point in path:
@@ -554,14 +551,14 @@ class PathPlan(object):
         cleaned_path = [path[0]]
         i = 0
         while i < len(path):
-            j = i + 1
+            j = i + 2
             while j < len(path)-1:
                 v1 = np.array(path[j]) - np.array(path[i])
                 v2 = np.array(path[j+1]) - np.array(path[j])
                 th1 = np.arctan2(v1[1], v1[0])
                 th2 = np.arctan2(v2[1], v2[0])
                 if np.abs(th1 - th2) < np.pi/4:
-                    j += 2
+                    j += 1
                 else:
                     cleaned_path.append(path[j])
                     break
