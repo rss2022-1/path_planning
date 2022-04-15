@@ -11,6 +11,7 @@ from visualization_msgs.msg import Marker
 from ackermann_msgs.msg import AckermannDriveStamped
 from sensor_msgs.msg import PointCloud
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Float32
 
 class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
@@ -35,6 +36,8 @@ class PurePursuit(object):
         self.prev_pose = None
         self.more_prev_pose = None
         self.goal = None
+
+        self.error_pub = rospy.Publisher("/error", Float32, queue_size = 10)
         rospy.loginfo("initialized pure pursuit")
 
     def goal_cb(self, msg):
@@ -140,7 +143,9 @@ class PurePursuit(object):
         t_array = np.einsum("ij,ij->i", current_point - p1_array, p2_array - p1_array) / np.linalg.norm(p2_array - p1_array, axis=1)**2
         t_array = np.clip(t_array, 0, 1)
         closest_points = p1_array + np.einsum('i,ij->ij', t_array, p2_array-p1_array)
-        closest_index = np.argmin(np.linalg.norm(closest_points - current_point, axis=1))
+        distance_to_cp = np.linalg.norm(closest_points - current_point, axis=1)
+        closest_index = np.argmin(distance_to_cp)
+        self.error_pub.publish(distance_to_cp)
 
         if closest_index + 2 < len(self.trajectory.points):
             v1 = np.array(self.trajectory.points[closest_index+1]) - np.array(self.trajectory.points[closest_index])

@@ -666,16 +666,16 @@ if __name__=="__main__":
     # print(pf.map_dimensions)
     # pf.test_coordinate_conversions()
     # pf.test_get_neighbors_dumb()
-    pf.test_get_distance()
+    # pf.test_get_distance()
 
-    starts = [(513, 961), (513, 961), (513, 961), (513, 961), (513, 961), (600, 466)]
-    ends = [(489,959), (873, 458), (1597, 979), (903, 458), (1597, 286), (926, 287)]
-    for i in range(len(starts)):
-        print(str(starts[i]) + ' to ' + str(ends[i]))
-        pf.test_bfs_search(starts[i], ends[i], pf.map)
-        pf.test_astar_search(starts[i], ends[i], pf.map)
-        print("--------------------")
+    # starts = [(513, 961), (513, 961), (513, 961), (513, 961), (513, 961), (600, 466)]
+    # ends = [(489,959), (873, 458), (1597, 979), (903, 458), (1597, 286), (926, 287)]
+    # for i in range(len(starts)):
+    #     print(str(starts[i]) + ' to ' + str(ends[i]))
+    #     pf.test_bfs_search(starts[i], ends[i], pf.map)
+    #     pf.test_astar_search(starts[i], ends[i], pf.map)
+    #     print("--------------------")
 
-    exit()
+    # exit()
 
     rospy.spin()
