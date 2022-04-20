@@ -6,20 +6,27 @@
   <arg name="map" default="$(find localization)/maps/stata_basement.yaml"/>
   <node pkg="map_server" name="map_server" type="map_server" args="$(arg map)"/>
 
+  <!-- Launch LaserScan combiner-->
+  <node pkg ="wall_follower" name ="scan_combiner" type="scan_combiner.py" output="screen">
+    <param name="sim" value="False"/>
+    <param name="raw_scan_topic" value="/scan"/>
+    <param name="scan_topic" value="/full_scan"/>
+  </node>
+
   <!-- Begin the simulator with the parameters from params.yaml -->
 
-  <node pkg="localization" type="particle_filter.py" name="particle_filter" output="screen">
-    <rosparam command="load" file="$(find localization)/params.yaml"/>
+  <node pkg="localization-solution" type="particle_filter.py" name="particle_filter" output="screen">
+    <rosparam command="load" file="$(find localization-solution)/params.yaml"/>
     <param name="particle_filter_frame" value="/base_link"/>
     <param name="map_topic" value="/map"/>
-    <param name="scan_topic" value="/scan"/>
+    <param name="scan_topic" value="/full_scan"/>
     <param name="odom_topic" value="/vesc/odom"/>
     <param name="angle_step" value="11"/>
     <param name="num_beams_per_particle" value="100" />
   </node>
   
   <!-- Launch particle filter -->
-  <node pkg="localization" type="particle_filter.py" name="particle_filter" output="screen">
+  <node pkg="localization-solution" type="particle_filter.py" name="particle_filter" output="screen">
     <rosparam command="load" file="$(find localization)/params.yaml"/>
   </node>
 
