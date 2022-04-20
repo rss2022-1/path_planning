@@ -13,7 +13,7 @@
     <param name="scan_topic" value="/full_scan"/>
   </node>
 
-  <!-- Begin the simulator with the parameters from params.yaml -->
+  <!-- Launch particle filter -->
 
   <node pkg="localization-solution" type="particle_filter.py" name="particle_filter" output="screen">
     <rosparam command="load" file="$(find localization-solution)/params.yaml"/>
@@ -25,11 +25,6 @@
     <param name="num_beams_per_particle" value="100" />
   </node>
   
-  <!-- Launch particle filter -->
-  <node pkg="localization-solution" type="particle_filter.py" name="particle_filter" output="screen">
-    <rosparam command="load" file="$(find localization)/params.yaml"/>
-  </node>
-
   <!-- Launch pure pursuit -->
   <node pkg="lab6" type="pure_pursuit.py" name="Trajectory_follower" output="screen">
 		<param name="odom_topic" value="/pf/pose/odom"/>
